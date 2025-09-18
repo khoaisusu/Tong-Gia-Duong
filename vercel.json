@@ -1,18 +1,22 @@
 {
-  "buildCommand": "cd my-clinic-app && npm run build",
-  "outputDirectory": "my-clinic-app/.next",
-  "installCommand": "cd my-clinic-app && npm install",
-  "framework": "nextjs",
+  "version": 2,
   "builds": [
     {
       "src": "my-clinic-app/package.json",
-      "use": "@vercel/next"
+      "use": "@vercel/next",
+      "config": {
+        "distDir": ".next"
+      }
     }
   ],
   "routes": [
     {
+      "src": "/api/(.*)",
+      "dest": "my-clinic-app/api/$1"
+    },
+    {
       "src": "/(.*)",
-      "dest": "/my-clinic-app/$1"
+      "dest": "my-clinic-app/$1"
     }
   ]
 }
