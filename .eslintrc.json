@@ -1,0 +1,8 @@
+{
+  "extends": ["./my-clinic-app/node_modules/eslint-config-next"],
+  "rules": {
+    "react-hooks/exhaustive-deps": "warn",
+    "@next/next/no-img-element": "off",
+    "react/display-name": "off"
+  }
+}
