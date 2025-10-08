@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import React, { useState, useEffect } from 'react';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import Layout from '../../components/Layout';
 import {
   CalendarDaysIcon,
@@ -26,6 +26,7 @@ interface Appointment {
   staff: string;
   status: 'scheduled' | 'confirmed' | 'completed' | 'cancelled';
   notes?: string;
+  treatmentId?: string;
 }
 
 export default function LichHenPage() {
@@ -34,6 +35,72 @@ export default function LichHenPage() {
   const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('week');
   const [showAppointmentForm, setShowAppointmentForm] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+
+  // Cancel appointment mutation
+  const cancelAppointmentMutation = useMutation({
+    mutationFn: async (appointmentId: string) => {
+      const res = await fetch('/api/luot-tri-lieu', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          maLuot: appointmentId,
+          trangThai: 'Hủy'
+        })
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to cancel appointment');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['treatment-sessions'] });
+      toast.success('Đã hủy lịch hẹn thành công!');
+      setSelectedAppointment(null);
+    },
+    onError: (error: Error) => {
+      toast.error(`Lỗi: ${error.message}`);
+    }
+  });
+
+  // Complete appointment mutation
+  const completeAppointmentMutation = useMutation({
+    mutationFn: async (appointmentId: string) => {
+      const res = await fetch('/api/luot-tri-lieu', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          maLuot: appointmentId,
+          trangThai: 'Hoàn thành'
+        })
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to complete appointment');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['treatment-sessions'] });
+      toast.success('Đã hoàn thành lịch hẹn!');
+      setSelectedAppointment(null);
+    },
+    onError: (error: Error) => {
+      toast.error(`Lỗi: ${error.message}`);
+    }
+  });
+
+  const handleCancelAppointment = (appointment: Appointment) => {
+    if (window.confirm(`Bạn có chắc muốn hủy lịch hẹn của ${appointment.customerName}?`)) {
+      cancelAppointmentMutation.mutate(appointment.id);
+    }
+  };
+
+  const handleCompleteAppointment = (appointment: Appointment) => {
+    if (window.confirm(`Bạn có chắc muốn đánh dấu hoàn thành lịch hẹn của ${appointment.customerName}?`)) {
+      completeAppointmentMutation.mutate(appointment.id);
+    }
+  };
 
   // Fetch treatment sessions (lượt trị liệu) as appointments
   const { data: treatmentSessions = [], isLoading } = useQuery({
@@ -55,24 +122,49 @@ export default function LichHenPage() {
     },
   });
 
-  // Convert treatment sessions to appointment format
-  const appointments: Appointment[] = treatmentSessions.map((session: LuotTriLieu) => {
-    // Find customer phone number
-    const customer = customers.find((c: KhachHang) => c.maKhachHang === session.maKhachHang);
-
-    return {
-      id: session.maLuot,
-      customerName: session.tenKhachHang,
-      phone: customer?.soDienThoai || '',
-      service: session.dichVuThucHien,
-      date: session.ngayThucHien,
-      time: session.gioBatDau,
-      duration: calculateDuration(session.gioBatDau, session.gioKetThuc),
-      staff: session.nhanVienThucHien,
-      status: mapSessionStatus(session.trangThai),
-      notes: session.ghiChu || '',
-    };
+  // Fetch services for service name lookup
+  const { data: services = [] } = useQuery({
+    queryKey: ['services'],
+    queryFn: async () => {
+      const res = await fetch('/api/dich-vu');
+      if (!res.ok) throw new Error('Failed to fetch services');
+      return res.json();
+    },
   });
+
+  // Convert treatment sessions to appointment format
+  const appointments: Appointment[] = treatmentSessions
+    .map((session: LuotTriLieu) => {
+      // Find customer phone number
+      const customer = customers.find((c: KhachHang) => c.maKhachHang === session.maKhachHang);
+
+      // Get service name from service code
+      const getServiceName = (serviceCode: string): string => {
+        if (!serviceCode) return '';
+
+        // Try to find the service by code
+        const service = services.find((s: DichVu) => s.maDichVu === serviceCode);
+        return service?.tenDichVu || serviceCode; // Return service name or fallback to code
+      };
+
+      return {
+        id: session.maLuot,
+        customerName: session.tenKhachHang,
+        phone: customer?.soDienThoai || '',
+        service: getServiceName(session.dichVuThucHien),
+        date: session.ngayThucHien,
+        time: session.gioBatDau,
+        duration: calculateDuration(session.gioBatDau, session.gioKetThuc),
+        staff: session.nhanVienThucHien,
+        status: mapSessionStatus(session.trangThai),
+        notes: session.ghiChu || '',
+        treatmentId: session.maLieuTrinh,
+      };
+    })
+    .filter((appointment: Appointment, index: number, self: Appointment[]) =>
+      // Remove duplicates by keeping only first occurrence of each ID
+      index === self.findIndex((a: Appointment) => a.id === appointment.id)
+    );
 
   // Helper function to calculate duration
   function calculateDuration(startTime: string, endTime: string): number {
@@ -153,6 +245,10 @@ export default function LichHenPage() {
   const today = new Date();
   const todayDate = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
   const todayAppointments = appointments.filter(apt => apt.date === todayDate);
+
+  // Selected date appointments (for day view)
+  const selectedDateStr = `${selectedDate.getFullYear()}-${(selectedDate.getMonth() + 1).toString().padStart(2, '0')}-${selectedDate.getDate().toString().padStart(2, '0')}`;
+  const selectedDayAppointments = appointments.filter(apt => apt.date === selectedDateStr);
   const stats = {
     total: todayAppointments.length,
     confirmed: todayAppointments.filter(a => a.status === 'confirmed').length,
@@ -194,7 +290,23 @@ export default function LichHenPage() {
                   </button>
                 ))}
               </div>
-              
+
+              <button
+                onClick={() => {
+                  setSelectedDate(new Date());
+                  setViewMode('day');
+                }}
+                className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors relative"
+              >
+                <CalendarDaysIcon className="w-5 h-5 mr-2" />
+                Hôm nay
+                {todayAppointments.length > 0 && (
+                  <span className="ml-2 bg-white text-blue-600 text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                    {todayAppointments.length}
+                  </span>
+                )}
+              </button>
+
               <button
                 onClick={() => setShowAppointmentForm(true)}
                 className="flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
@@ -346,8 +458,8 @@ export default function LichHenPage() {
               </h3>
               
               <div className="space-y-3">
-                {todayAppointments.length > 0 ? (
-                  todayAppointments.map((appointment) => (
+                {selectedDayAppointments.length > 0 ? (
+                  selectedDayAppointments.map((appointment) => (
                     <div
                       key={appointment.id}
                       className={`p-4 rounded-lg border-2 ${getStatusColor(appointment.status)}`}
@@ -408,10 +520,11 @@ export default function LichHenPage() {
 
                           {appointment.status !== 'completed' && appointment.status !== 'cancelled' && (
                             <button
-                              onClick={() => toast.error('Đã hủy lịch hẹn')}
-                              className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
+                              onClick={() => handleCancelAppointment(appointment)}
+                              disabled={cancelAppointmentMutation.isPending}
+                              className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700 disabled:opacity-50"
                             >
-                              Hủy
+                              {cancelAppointmentMutation.isPending ? 'Đang hủy...' : 'Hủy'}
                             </button>
                           )}
                         </div>
@@ -433,9 +546,14 @@ export default function LichHenPage() {
       {showAppointmentForm && (
         <AppointmentFormModal
           onClose={() => setShowAppointmentForm(false)}
-          onSave={() => {
+          onSave={(appointmentDate?: Date) => {
             setShowAppointmentForm(false);
-            toast.success('Đã thêm lịch hẹn mới!');
+            // If appointment date is provided, navigate to that date
+            if (appointmentDate) {
+              setSelectedDate(appointmentDate);
+              // Switch to day view to better show the new appointment
+              setViewMode('day');
+            }
           }}
         />
       )}
@@ -464,14 +582,102 @@ function AppointmentFormModal({ onClose, onSave }: any) {
   const queryClient = useQueryClient();
   const [selectedTreatmentPlan, setSelectedTreatmentPlan] = useState<LieuTrinh | null>(null);
   const [selectedStaff, setSelectedStaff] = useState('');
+  const [selectedSupervisor, setSelectedSupervisor] = useState('');
   const [appointmentDate, setAppointmentDate] = useState('');
-  const [appointmentTime, setAppointmentTime] = useState('');
+  const [appointmentTime, setAppointmentTime] = useState('09:00');
   const [notes, setNotes] = useState('');
   const [showTreatmentModal, setShowTreatmentModal] = useState(false);
   const [treatmentSearch, setTreatmentSearch] = useState('');
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [customerSearch, setCustomerSearch] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<KhachHang | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Initialize jQuery datepicker
+  useEffect(() => {
+    const initDatepicker = async () => {
+      if (typeof window !== 'undefined') {
+        try {
+          const $ = (await import('jquery')).default;
+
+          // Make jQuery global so datepicker can access it
+          (window as any).jQuery = $;
+          (window as any).$ = $;
+
+          await import('jquery-ui/ui/widgets/datepicker');
+
+          // Add jQuery UI CSS if not already added
+          if (!document.getElementById('jquery-ui-css')) {
+            const link = document.createElement('link');
+            link.id = 'jquery-ui-css';
+            link.rel = 'stylesheet';
+            link.href = 'https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css';
+            document.head.appendChild(link);
+          }
+
+          // Set Vietnamese locale for datepicker
+          $.datepicker.regional['vi'] = {
+            closeText: 'Đóng',
+            prevText: 'Trước',
+            nextText: 'Sau',
+            currentText: 'Hôm nay',
+            monthNames: [
+              'Tháng Một', 'Tháng Hai', 'Tháng Ba', 'Tháng Tư',
+              'Tháng Năm', 'Tháng Sáu', 'Tháng Bảy', 'Tháng Tám',
+              'Tháng Chín', 'Tháng Mười', 'Tháng Mười Một', 'Tháng Mười Hai'
+            ],
+            monthNamesShort: [
+              'Th1', 'Th2', 'Th3', 'Th4', 'Th5', 'Th6',
+              'Th7', 'Th8', 'Th9', 'Th10', 'Th11', 'Th12'
+            ],
+            dayNames: [
+              'Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư',
+              'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'
+            ],
+            dayNamesShort: [
+              'CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'
+            ],
+            dayNamesMin: [
+              'CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'
+            ],
+            weekHeader: 'Tu',
+            dateFormat: 'dd/mm/yy',
+            firstDay: 1,
+            isRTL: false,
+            showMonthAfterYear: false,
+            yearSuffix: ''
+          };
+          $.datepicker.setDefaults($.datepicker.regional['vi']);
+
+          // Initialize datepicker
+          ($('#appointmentDatePicker') as any).datepicker({
+            dateFormat: 'dd/mm/yy',
+            minDate: 0,
+            onSelect: function(dateText: string) {
+              setAppointmentDate(dateText);
+            }
+          });
+        } catch (error) {
+          console.error('Error initializing datepicker:', error);
+        }
+      }
+    };
+
+    initDatepicker();
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        try {
+          const $ = (window as any).$;
+          if ($ && $('#appointmentDatePicker').length && ($('#appointmentDatePicker') as any).datepicker) {
+            ($('#appointmentDatePicker') as any).datepicker('destroy');
+          }
+        } catch (error) {
+          console.error('Error destroying datepicker:', error);
+        }
+      }
+    };
+  }, []);
 
   // Fetch treatment plans
   const { data: treatmentPlans = [] } = useQuery({
@@ -503,12 +709,33 @@ function AppointmentFormModal({ onClose, onSave }: any) {
     },
   });
 
-  // Filter treatment plans for search
-  const filteredTreatmentPlans = treatmentPlans.filter((plan: LieuTrinh) =>
-    plan.tenLieuTrinh?.toLowerCase().includes(treatmentSearch.toLowerCase()) ||
-    plan.maLieuTrinh?.toLowerCase().includes(treatmentSearch.toLowerCase()) ||
-    plan.tenKhachHang?.toLowerCase().includes(treatmentSearch.toLowerCase())
-  );
+  // Filter treatment plans for search - only show active plans with services
+  const filteredTreatmentPlans = treatmentPlans.filter((plan: LieuTrinh) => {
+    // Only show treatment plans that have services (not empty, not [], not blank)
+    const hasServices = plan.danhSachDichVu &&
+                       plan.danhSachDichVu.trim() !== '' &&
+                       plan.danhSachDichVu !== '[]' &&
+                       plan.danhSachDichVu !== 'null';
+
+    if (!hasServices) return false;
+
+    // Filter out completed or cancelled treatment plans
+    if (plan.trangThai === 'Hoàn thành' || plan.trangThai === 'Hủy') {
+      return false;
+    }
+
+    // Filter out treatment plans that have reached maximum sessions
+    const currentSessions = parseInt(plan.soBuoiDaThucHien || '0');
+    const totalSessions = parseInt(plan.soBuoi || '0');
+    if (currentSessions >= totalSessions) {
+      return false;
+    }
+
+    // Also filter by search term
+    return plan.tenLieuTrinh?.toLowerCase().includes(treatmentSearch.toLowerCase()) ||
+           plan.maLieuTrinh?.toLowerCase().includes(treatmentSearch.toLowerCase()) ||
+           plan.tenKhachHang?.toLowerCase().includes(treatmentSearch.toLowerCase());
+  });
 
   // Filter customers for search
   const filteredCustomers = customers.filter((customer: KhachHang) =>
@@ -520,54 +747,86 @@ function AppointmentFormModal({ onClose, onSave }: any) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!selectedTreatmentPlan) {
-      toast.error('Vui lòng chọn liệu trình!');
+    // Prevent double submission
+    if (isSubmitting) {
       return;
     }
 
-    if (!appointmentDate || !appointmentTime) {
-      toast.error('Vui lòng chọn ngày và giờ hẹn!');
+    setIsSubmitting(true);
+
+    try {
+      if (!selectedTreatmentPlan) {
+        toast.error('Vui lòng chọn liệu trình!');
+        return;
+      }
+
+      if (!appointmentDate || !appointmentTime) {
+        toast.error('Vui lòng chọn ngày và giờ hẹn!');
+        return;
+      }
+
+      // Parse date from dd/mm/yyyy format
+      const dateParts = appointmentDate.split('/');
+      if (dateParts.length !== 3) {
+        toast.error('Định dạng ngày không hợp lệ! Vui lòng chọn lại.');
+        return;
+      }
+
+      const day = parseInt(dateParts[0]);
+      const month = parseInt(dateParts[1]) - 1; // Month is 0-indexed in JS Date
+      const year = parseInt(dateParts[2]);
+
+      const selectedDate = new Date(year, month, day);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      if (selectedDate < today) {
+        toast.error('Không thể đặt lịch hẹn trong quá khứ!');
+        return;
+      }
+
+    // Validate time within working hours
+    if (!appointmentTime) {
+      toast.error('Vui lòng chọn giờ hẹn!');
       return;
     }
 
-    // Validate date format dd/mm/yyyy
-    const dateRegex = /^(\d{2})\/(\d{2})\/(\d{4})$/;
-    const dateMatch = appointmentDate.match(dateRegex);
-
-    if (!dateMatch) {
-      toast.error('Vui lòng nhập ngày theo định dạng dd/mm/yyyy!');
-      return;
-    }
-
-    const [, day, month, year] = dateMatch;
-    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-
-    // Check if date is valid
-    if (date.getDate() !== parseInt(day) ||
-        date.getMonth() !== parseInt(month) - 1 ||
-        date.getFullYear() !== parseInt(year)) {
-      toast.error('Ngày không hợp lệ!');
-      return;
-    }
-
-    // Check if date is not in the past
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    if (date < today) {
-      toast.error('Không thể đặt lịch hẹn trong quá khứ!');
+    const [hours, minutes] = appointmentTime.split(':').map(Number);
+    if (hours < 7 || hours > 20 || (hours === 20 && minutes > 0)) {
+      toast.error('Giờ hẹn phải trong khoảng 7:00 - 20:00!');
       return;
     }
 
     // Save to treatment sessions API
     const createAppointment = async () => {
       try {
-        // Convert dd/mm/yyyy to yyyy-mm-dd for API
-        const [day, month, year] = appointmentDate.split('/');
-        const formattedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+        // Convert date from dd/mm/yyyy to yyyy-mm-dd for API
+        const dateParts = appointmentDate.split('/');
+        const formattedDate = `${dateParts[2]}-${dateParts[1].padStart(2, '0')}-${dateParts[0].padStart(2, '0')}`;
 
         // Get services from treatment plan (use first service for duration estimation)
-        const treatmentServices = selectedTreatmentPlan.danhSachDichVu?.split(',') || [];
-        const primaryService = treatmentServices[0]?.trim() || 'Điều trị';
+        let primaryService = 'Điều trị';
+
+        if (selectedTreatmentPlan.danhSachDichVu &&
+            selectedTreatmentPlan.danhSachDichVu !== '[]' &&
+            selectedTreatmentPlan.danhSachDichVu.trim() !== '') {
+          try {
+            const services = JSON.parse(selectedTreatmentPlan.danhSachDichVu);
+            if (Array.isArray(services) && services.length > 0) {
+              // Only get service name, not code
+              primaryService = services[0]?.tenDichVu || 'Điều trị';
+            }
+          } catch (error) {
+            console.warn('Error parsing services JSON, fallback to splitting:', error);
+            const treatmentServices = selectedTreatmentPlan.danhSachDichVu.split(',');
+            primaryService = treatmentServices[0]?.trim() || 'Điều trị';
+          }
+        }
+
+        console.log('🔍 Service from treatment plan:', {
+          originalDanhSachDichVu: selectedTreatmentPlan.danhSachDichVu,
+          extractedService: primaryService
+        });
         const duration = 60; // Default 60 minutes
 
         // Calculate end time
@@ -584,11 +843,14 @@ function AppointmentFormModal({ onClose, onSave }: any) {
           gioBatDau: appointmentTime,
           gioKetThuc: endTimeStr,
           dichVuThucHien: primaryService,
-          nhanVienThucHien: selectedStaff ? staff.find((s: NhanVien) => s.maNhanVien === selectedStaff)?.hoVaTen || '' : '',
+          nhanVienThucHien: selectedStaff || '',
+          nguoiChinh: selectedSupervisor || '',
           danhGia: '',
           ghiChu: notes,
           trangThai: 'Đã lên lịch',
         };
+
+        console.log('📋 Appointment data being sent:', appointmentData);
 
         const res = await fetch('/api/luot-tri-lieu', {
           method: 'POST',
@@ -596,22 +858,38 @@ function AppointmentFormModal({ onClose, onSave }: any) {
           body: JSON.stringify(appointmentData),
         });
 
+        console.log('🌐 API Response status:', res.status, res.statusText);
+
         if (!res.ok) {
-          throw new Error('Failed to create appointment');
+          const errorData = await res.json();
+          console.error('❌ API Error:', errorData);
+          throw new Error(errorData.error || 'Failed to create appointment');
         }
+
+        const responseData = await res.json();
+        console.log('✅ API Success response:', responseData);
 
         // Invalidate and refetch treatment sessions data
         queryClient.invalidateQueries({ queryKey: ['treatment-sessions'] });
 
         toast.success('Đã tạo lịch hẹn thành công!');
-        onSave();
+
+        // Navigate to the appointment date to show the new appointment
+        const appointmentDateObj = new Date(formattedDate);
+        // Pass the date to parent component through onSave callback
+        onSave(appointmentDateObj);
       } catch (error) {
         console.error('Error creating appointment:', error);
         toast.error('Có lỗi xảy ra khi tạo lịch hẹn!');
       }
     };
 
-    createAppointment();
+    await createAppointment();
+    } catch (error) {
+      console.error('Error in handleSubmit:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -662,42 +940,44 @@ function AppointmentFormModal({ onClose, onSave }: any) {
             </div>
 
             {/* Date and Time */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Ngày hẹn (dd/mm/yyyy) <span className="text-red-500">*</span>
+                  📅 Ngày hẹn <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
+                  id="appointmentDatePicker"
                   value={appointmentDate}
-                  onChange={(e) => {
-                    // Format input as dd/mm/yyyy
-                    let value = e.target.value.replace(/\D/g, ''); // Remove non-digits
-                    if (value.length >= 2) {
-                      value = value.substring(0, 2) + '/' + value.substring(2);
-                    }
-                    if (value.length >= 5) {
-                      value = value.substring(0, 5) + '/' + value.substring(5, 9);
-                    }
-                    setAppointmentDate(value);
-                  }}
+                  onChange={(e) => setAppointmentDate(e.target.value)}
                   placeholder="dd/mm/yyyy"
-                  maxLength={10}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500 text-gray-900"
                   required
+                  readOnly
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  Chọn ngày từ hôm nay trở đi
+                </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Giờ hẹn <span className="text-red-500">*</span>
+                  🕐 Giờ hẹn <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="time"
-                  value={appointmentTime}
-                  onChange={(e) => setAppointmentTime(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
-                  required
-                />
+                <div className="relative">
+                  <input
+                    type="time"
+                    value={appointmentTime}
+                    onChange={(e) => setAppointmentTime(e.target.value)}
+                    min="07:00"
+                    max="20:00"
+                    step="900"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500 text-gray-900"
+                    required
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Giờ làm việc: 7:00 - 20:00 (bước 15 phút)
+                </p>
               </div>
             </div>
 
@@ -713,11 +993,39 @@ function AppointmentFormModal({ onClose, onSave }: any) {
               >
                 <option value="">Chọn nhân viên</option>
                 {staff.filter((s: NhanVien) => s.trangThai === 'Hoạt động').map((staffMember: NhanVien) => (
-                  <option key={staffMember.maNhanVien} value={staffMember.maNhanVien}>
-                    {staffMember.hoVaTen} - {staffMember.chucVu}
+                  <option key={staffMember.maNhanVien} value={staffMember.hoVaTen}>
+                    {staffMember.hoVaTen}
                   </option>
                 ))}
               </select>
+            </div>
+
+            {/* Supervisor Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Người chính (Quản lý/Giám sát)
+              </label>
+              <select
+                value={selectedSupervisor}
+                onChange={(e) => setSelectedSupervisor(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
+              >
+                <option value="">Chọn người chính</option>
+                {staff
+                  .filter((s: NhanVien) =>
+                    s.trangThai === 'Hoạt động' &&
+                    s.quyenHan === 'Admin'
+                  )
+                  .map((supervisor: NhanVien) => (
+                    <option key={supervisor.maNhanVien} value={supervisor.hoVaTen}>
+                      {supervisor.hoVaTen}
+                    </option>
+                  ))
+                }
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Để tính lương quản lý dựa trên chênh lệch hoa hồng
+              </p>
             </div>
 
             {/* Notes */}
@@ -744,9 +1052,14 @@ function AppointmentFormModal({ onClose, onSave }: any) {
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 text-white bg-primary-600 rounded-md hover:bg-primary-700"
+                disabled={isSubmitting}
+                className={`px-4 py-2 text-white rounded-md transition-colors ${
+                  isSubmitting
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-primary-600 hover:bg-primary-700'
+                }`}
               >
-                Thêm lịch hẹn
+                {isSubmitting ? 'Đang tạo...' : 'Thêm lịch hẹn'}
               </button>
             </div>
           </form>
@@ -895,6 +1208,152 @@ function AppointmentFormModal({ onClose, onSave }: any) {
 function AppointmentDetailsModal({ appointment, onClose }: any) {
   const queryClient = useQueryClient();
   const [isCompleting, setIsCompleting] = useState(false);
+  const [additionalServices, setAdditionalServices] = useState<{ service: string; sessions: number }[]>([]);
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  // Fetch treatment plan to get available services
+  const { data: treatmentPlan } = useQuery({
+    queryKey: ['treatment-plan', appointment.treatmentId],
+    queryFn: async () => {
+      if (!appointment.treatmentId) return null;
+      const res = await fetch(`/api/lieu-trinh?id=${appointment.treatmentId}`);
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.find((t: any) => t.maLieuTrinh === appointment.treatmentId);
+    },
+    enabled: !!appointment.treatmentId,
+  });
+
+  // Parse existing additional services from notes
+  useEffect(() => {
+    if (appointment.notes) {
+      // Try to find pattern like "Châm cứu: 1 buổi, Thủy châm: 2 buổi"
+      const servicesMatch = appointment.notes.match(/([^|]+:\s*\d+\s*buổi(?:,\s*[^|]+:\s*\d+\s*buổi)*)/);
+      if (servicesMatch) {
+        const servicesText = servicesMatch[1].trim();
+        const parsed = servicesText.split(',').map((item: string) => {
+          const parts = item.trim().match(/(.+?):\s*(\d+)\s*buổi/);
+          if (parts) {
+            return { service: parts[1].trim(), sessions: parseInt(parts[2]) };
+          }
+          return null;
+        }).filter(Boolean);
+
+        if (parsed.length > 0) {
+          setAdditionalServices(parsed as { service: string; sessions: number }[]);
+        }
+      }
+    }
+  }, [appointment.notes]);
+
+  // Parse available services from treatment plan
+  const getAvailableServices = (): string[] => {
+    if (!treatmentPlan?.danhSachDichVu) return [];
+
+    try {
+      const services = JSON.parse(treatmentPlan.danhSachDichVu);
+      if (Array.isArray(services)) {
+        return services
+          .map((s: any) => s.tenDichVu || s)
+          .filter((serviceName: string) => {
+            // Exclude services with "xoa bóp" or "massage" - these are main services
+            const lowerName = serviceName.toLowerCase();
+            return !lowerName.includes('xoa bóp') && !lowerName.includes('massage');
+          });
+      }
+    } catch (error) {
+      const servicesList = treatmentPlan.danhSachDichVu
+        .split(',')
+        .map((s: string) => s.trim())
+        .filter((serviceName: string) => {
+          // Exclude services with "xoa bóp" or "massage" - these are main services
+          if (!serviceName) return false;
+          const lowerName = serviceName.toLowerCase();
+          return !lowerName.includes('xoa bóp') && !lowerName.includes('massage');
+        });
+      return servicesList;
+    }
+    return [];
+  };
+
+  // Add additional service
+  const addAdditionalService = () => {
+    const availableServices = getAvailableServices();
+    if (availableServices.length > 0) {
+      setAdditionalServices([...additionalServices, { service: availableServices[0], sessions: 1 }]);
+    }
+  };
+
+  // Remove additional service
+  const removeAdditionalService = (index: number) => {
+    setAdditionalServices(additionalServices.filter((_, i) => i !== index));
+  };
+
+  // Update additional service
+  const updateAdditionalService = (index: number, field: 'service' | 'sessions', value: string | number) => {
+    const updated = [...additionalServices];
+    if (field === 'service') {
+      updated[index].service = value as string;
+    } else {
+      updated[index].sessions = parseInt(value as string) || 1;
+    }
+    setAdditionalServices(updated);
+  };
+
+  // Format additional services for notes
+  const formatAdditionalServicesForNotes = (): string => {
+    if (additionalServices.length === 0) return '';
+
+    // List each service with its session count
+    return additionalServices
+      .map(item => `${item.service}: ${item.sessions} buổi`)
+      .join(', ');
+  };
+
+  // Save additional services to notes
+  const handleSaveAdditionalServices = async () => {
+    setIsUpdating(true);
+    try {
+      const additionalServicesText = formatAdditionalServicesForNotes();
+
+      // Remove existing additional services from notes (any text matching "ServiceName: X buổi" pattern)
+      let baseNotes = appointment.notes || '';
+      // Remove pattern like "Châm cứu: 1 buổi, Thủy châm: 2 buổi" or "Châm cứu: 1 buổi"
+      baseNotes = baseNotes.replace(/[^|]+:\s*\d+\s*buổi(?:,\s*[^|]+:\s*\d+\s*buổi)*/g, '').trim();
+      // Clean up any leftover pipes
+      baseNotes = baseNotes.replace(/^\|\s*|\s*\|$/g, '').trim();
+      baseNotes = baseNotes.replace(/\s*\|\s*\|/g, ' |').trim();
+
+      // Combine with new additional services
+      let combinedNotes = baseNotes;
+      if (additionalServicesText) {
+        combinedNotes = combinedNotes
+          ? `${combinedNotes} | ${additionalServicesText}`
+          : additionalServicesText;
+      }
+
+      const response = await fetch('/api/luot-tri-lieu', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          maLuot: appointment.id,
+          ghiChu: combinedNotes,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update notes');
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['treatment-sessions'] });
+      toast.success('Đã lưu dịch vụ thêm!');
+    } catch (error) {
+      console.error('Error saving additional services:', error);
+      toast.error('Có lỗi xảy ra khi lưu dịch vụ thêm!');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
 
   const handleCompleteSession = async () => {
     if (appointment.status === 'completed') {
@@ -989,6 +1448,72 @@ function AppointmentDetailsModal({ appointment, onClose }: any) {
               </div>
             )}
           </div>
+
+          {/* Additional Services Section */}
+          {treatmentPlan && getAvailableServices().length > 0 && appointment.status !== 'completed' && appointment.status !== 'cancelled' && (
+            <div className="mt-6 border-t pt-6">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="text-md font-semibold text-gray-900">Dịch vụ thêm</h4>
+                <button
+                  type="button"
+                  onClick={addAdditionalService}
+                  className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                >
+                  + Thêm dịch vụ
+                </button>
+              </div>
+
+              {additionalServices.length > 0 ? (
+                <div className="space-y-3">
+                  {additionalServices.map((item, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <select
+                        value={item.service}
+                        onChange={(e) => updateAdditionalService(index, 'service', e.target.value)}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500 text-sm"
+                      >
+                        {getAvailableServices().map((service, sIdx) => (
+                          <option key={sIdx} value={service}>
+                            {service}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        min="1"
+                        value={item.sessions}
+                        onChange={(e) => updateAdditionalService(index, 'sessions', e.target.value)}
+                        className="w-20 px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500 text-sm"
+                        placeholder="Buổi"
+                      />
+                      <span className="text-sm text-gray-600 whitespace-nowrap">buổi</span>
+                      <button
+                        type="button"
+                        onClick={() => removeAdditionalService(index)}
+                        className="text-red-600 hover:text-red-700 px-2"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+
+                  <button
+                    onClick={handleSaveAdditionalServices}
+                    disabled={isUpdating}
+                    className="w-full px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 text-sm"
+                  >
+                    {isUpdating ? 'Đang lưu...' : 'Lưu dịch vụ thêm'}
+                  </button>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 italic">Chưa có dịch vụ thêm nào được chọn</p>
+              )}
+
+              <p className="text-xs text-gray-500 mt-3">
+                💡 Dịch vụ thêm sẽ được lưu vào ghi chú (ví dụ: &quot;Châm cứu: 1 buổi, Thủy châm: 2 buổi&quot;)
+              </p>
+            </div>
+          )}
 
           <div className="flex justify-end space-x-3 mt-6">
             <button

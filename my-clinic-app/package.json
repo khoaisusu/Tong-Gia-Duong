@@ -18,6 +18,8 @@
     "clsx": "^2.0.0",
     "date-fns": "^2.30.0",
     "googleapis": "^128.0.0",
+    "jquery": "^3.7.1",
+    "jquery-ui": "^1.14.1",
     "next": "^14.2.32",
     "next-auth": "^4.24.5",
     "react": "^18.2.0",
@@ -30,6 +32,8 @@
   },
   "devDependencies": {
     "@tanstack/react-query-devtools": "^5.87.4",
+    "@types/jquery": "^3.5.33",
+    "@types/jqueryui": "^1.12.24",
     "@types/node": "^20.10.5",
     "@types/qrcode": "^1.5.5",
     "@types/react": "^18.2.45",

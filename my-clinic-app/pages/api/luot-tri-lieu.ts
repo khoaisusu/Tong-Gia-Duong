@@ -9,12 +9,20 @@ import {
   SHEETS,
   generateId
 } from '../../utils/googleSheets';
-import { 
-  mappingLuotTriLieu, 
+import {
+  mappingLuotTriLieu,
   mappingLieuTrinh,
   LuotTriLieu,
-  LieuTrinh 
+  LieuTrinh
 } from '../../utils/columnMapping';
+import {
+  calculateCommissionAndSalary,
+  parseServiceFromTreatment,
+  formatCommissionCurrency,
+  getServiceCommissionData,
+  getEmployeeCommissionRate,
+  SUPERVISOR_COMMISSION_RATE
+} from '../../utils/commissionCalculator';
 
 export default async function handler(
   req: NextApiRequest,
@@ -59,11 +67,22 @@ export default async function handler(
       case 'POST':
         // Create new treatment session
         const newSession = req.body as Partial<LuotTriLieu>;
-        
+
+        console.log('📥 Received appointment data:', newSession);
+
         // Validate required fields for appointments
-        if (!newSession.dichVuThucHien || !newSession.maKhachHang || !newSession.tenKhachHang) {
+        if (!newSession.dichVuThucHien ||
+            newSession.dichVuThucHien === '[]' ||
+            newSession.dichVuThucHien.trim() === '' ||
+            !newSession.maKhachHang ||
+            !newSession.tenKhachHang) {
+          console.error('❌ Validation failed:', {
+            dichVuThucHien: newSession.dichVuThucHien,
+            maKhachHang: newSession.maKhachHang,
+            tenKhachHang: newSession.tenKhachHang
+          });
           return res.status(400).json({
-            error: 'Khách hàng và dịch vụ thực hiện là bắt buộc'
+            error: 'Khách hàng và dịch vụ thực hiện là bắt buộc (dịch vụ không được để trống hoặc [])'
           });
         }
 
@@ -88,54 +107,148 @@ export default async function handler(
               error: 'Liệu trình đã kết thúc, không thể thêm buổi mới'
             });
           }
+
+          // Check if treatment has reached maximum sessions
+          const currentSessions = parseInt(treatment.soBuoiDaThucHien || '0');
+          const totalSessions = parseInt(treatment.soBuoi || '0');
+
+          if (currentSessions >= totalSessions) {
+            return res.status(400).json({
+              error: `Liệu trình đã đạt đủ ${totalSessions} buổi (${currentSessions}/${totalSessions}), không thể thêm buổi mới`
+            });
+          }
         }
+
+        // Calculate commission and management salary
+        let hoaHongNhanVien = '0';
+        let luongQuanLy = '0';
+
+        if (newSession.dichVuThucHien && newSession.nhanVienThucHien) {
+          try {
+            const services = parseServiceFromTreatment(newSession.dichVuThucHien);
+            console.log('🧮 Calculating commission for services:', services);
+
+            // Calculate for the first/main service
+            if (services.length > 0) {
+              // Get service price
+              const servicesData = await getServiceCommissionData();
+              const normalizedSearchName = services[0].toLowerCase().trim();
+              let service = servicesData.find(s =>
+                s.tenDichVu.toLowerCase().trim() === normalizedSearchName
+              );
+              if (!service) {
+                service = servicesData.find(s => {
+                  const normalizedServiceName = s.tenDichVu.toLowerCase().trim();
+                  return normalizedServiceName.includes(normalizedSearchName) ||
+                         normalizedSearchName.includes(normalizedServiceName);
+                });
+              }
+
+              if (service) {
+                const servicePrice = service.giaDichVu;
+
+                // Calculate employee commission
+                const employeeCommissionRate = await getEmployeeCommissionRate(newSession.nhanVienThucHien);
+                const employeeCommission = (employeeCommissionRate / 100) * servicePrice;
+                hoaHongNhanVien = employeeCommission.toString();
+
+                // Calculate management salary
+                // Logic:
+                // - If supervisor exists and different from employee → 20% of service price
+                // - If supervisor is same as employee or no supervisor → (50% - employee commission)
+                const hasSupervisor = newSession.nguoiChinh && newSession.nguoiChinh.trim() !== '';
+                const isSupervisorDifferent = hasSupervisor &&
+                  newSession.nguoiChinh?.trim() !== newSession.nhanVienThucHien?.trim();
+
+                let managementSalary = 0;
+                if (isSupervisorDifferent) {
+                  // Supervisor is different person → gets 20%
+                  managementSalary = (SUPERVISOR_COMMISSION_RATE / 100) * servicePrice;
+                } else {
+                  // Manager does it themselves or no supervisor → gets remaining up to 50%
+                  managementSalary = Math.max(0, (50 / 100) * servicePrice - employeeCommission);
+                }
+                luongQuanLy = managementSalary.toString();
+
+                console.log('💰 Commission calculation result:', {
+                  service: services[0],
+                  employee: newSession.nhanVienThucHien,
+                  supervisor: newSession.nguoiChinh || 'None',
+                  isSupervisorDifferent,
+                  servicePrice,
+                  employeeCommissionRate: `${employeeCommissionRate}%`,
+                  employeeCommission: formatCommissionCurrency(employeeCommission),
+                  managementSalary: formatCommissionCurrency(managementSalary)
+                });
+              } else {
+                console.warn(`⚠️ Service "${services[0]}" not found, skipping commission calculation`);
+              }
+            }
+          } catch (error) {
+            console.warn('⚠️ Commission calculation failed, using default values:', error);
+            // Continue with 0 values on calculation error
+          }
+        }
+
+        // Generate unique ID for session
+        const generatedId = generateId('BT');
+        console.log('🆔 Generated ID for session:', generatedId);
 
         // Add session data
         const sessionData = {
           ...newSession,
-          maLuot: generateId('BT'),
+          maLuot: generatedId,
           maLieuTrinh: newSession.maLieuTrinh || '', // Allow empty for standalone appointments
           maKhachHang: newSession.maKhachHang,
           tenKhachHang: newSession.tenKhachHang,
+          hoaHongNhanVien,
+          luongQuanLy,
           ngayThucHien: newSession.ngayThucHien || new Date().toISOString().split('T')[0],
           trangThai: newSession.trangThai || 'Đã lên lịch',
           nhanVienThucHien: newSession.nhanVienThucHien || session.user?.name || '',
         };
 
+        console.log('📦 Complete session data to save:', sessionData);
+
+        // Validate required fields before saving
+        const requiredFields: (keyof typeof sessionData)[] = ['maLuot', 'maKhachHang', 'tenKhachHang', 'dichVuThucHien'];
+        for (const field of requiredFields) {
+          if (!sessionData[field]) {
+            console.error(`❌ Missing required field: ${field}`, sessionData);
+            throw new Error(`Thiếu trường bắt buộc: ${field}`);
+          }
+        }
+
         // Create session
-        await appendRow(SHEETS.LUOT_TRI_LIEU, mappingLuotTriLieu, sessionData);
+        console.log('💾 Saving session data to Google Sheets:', sessionData);
+
+        try {
+          await appendRow(SHEETS.LUOT_TRI_LIEU, mappingLuotTriLieu, sessionData);
+          console.log('✅ Successfully saved to Google Sheets');
+        } catch (sheetError) {
+          console.error('❌ Google Sheets save error:', sheetError);
+          throw new Error('Lỗi lưu dữ liệu vào Google Sheets: ' + (sheetError instanceof Error ? sheetError.message : 'Unknown error'));
+        }
 
         let treatmentProgress = null;
 
-        // Update treatment progress only if this is part of a treatment plan
+        // Only show treatment progress info, don't update it yet
+        // Progress will be updated when session is marked as completed
         if (treatment && newSession.maLieuTrinh) {
           const currentSessions = parseInt(treatment.soBuoiDaThucHien || '0');
           const totalSessions = parseInt(treatment.soBuoi || '0');
-          const newSessionCount = currentSessions + 1;
-
-          const treatmentUpdates: Partial<LieuTrinh> = {
-            soBuoiDaThucHien: newSessionCount.toString(),
-          };
-
-          // Mark as completed if all sessions done
-          if (newSessionCount >= totalSessions) {
-            treatmentUpdates.trangThai = 'Hoàn thành';
-            treatmentUpdates.ngayKetThuc = sessionData.ngayThucHien;
-          }
-
-          await updateRow(
-            SHEETS.LIEU_TRINH,
-            mappingLieuTrinh,
-            'maLieuTrinh',
-            newSession.maLieuTrinh,
-            treatmentUpdates
-          );
 
           treatmentProgress = {
-            completed: newSessionCount,
+            completed: currentSessions,
             total: totalSessions,
-            isComplete: newSessionCount >= totalSessions
+            isComplete: currentSessions >= totalSessions
           };
+
+          console.log('📋 Created appointment for treatment plan:', {
+            treatmentId: newSession.maLieuTrinh,
+            currentProgress: `${currentSessions}/${totalSessions}`,
+            note: 'Progress will be updated when session is completed'
+          });
         }
 
         return res.status(201).json({
@@ -147,9 +260,97 @@ export default async function handler(
       case 'PUT':
         // Update session
         const { maLuot, ...updates } = req.body;
-        
+
         if (!maLuot) {
           return res.status(400).json({ error: 'Mã lượt trị liệu là bắt buộc' });
+        }
+
+        // Get current session data before updating
+        const currentSession = await getRowById(
+          SHEETS.LUOT_TRI_LIEU,
+          mappingLuotTriLieu,
+          'maLuot',
+          maLuot
+        );
+
+        if (!currentSession) {
+          return res.status(404).json({ error: 'Lượt trị liệu không tồn tại' });
+        }
+
+        // Recalculate commission if:
+        // 1. Employee or service changed
+        // 2. Status is being changed to "Hoàn thành" (to ensure commission is calculated on completion)
+        // 3. Supervisor changed
+        if (updates.nhanVienThucHien || updates.dichVuThucHien || updates.nguoiChinh ||
+            (updates.trangThai === 'Hoàn thành' && currentSession.trangThai !== 'Hoàn thành')) {
+
+          const employeeId = updates.nhanVienThucHien || currentSession.nhanVienThucHien;
+          const serviceData = updates.dichVuThucHien || currentSession.dichVuThucHien;
+          const supervisorId = updates.nguoiChinh !== undefined ? updates.nguoiChinh : currentSession.nguoiChinh;
+
+          if (employeeId && serviceData) {
+            try {
+              const services = parseServiceFromTreatment(serviceData);
+              if (services.length > 0) {
+                // Get service price
+                const servicesData = await getServiceCommissionData();
+                const normalizedSearchName = services[0].toLowerCase().trim();
+                let service = servicesData.find(s =>
+                  s.tenDichVu.toLowerCase().trim() === normalizedSearchName
+                );
+                if (!service) {
+                  service = servicesData.find(s => {
+                    const normalizedServiceName = s.tenDichVu.toLowerCase().trim();
+                    return normalizedServiceName.includes(normalizedSearchName) ||
+                           normalizedSearchName.includes(normalizedServiceName);
+                  });
+                }
+
+                if (service) {
+                  const servicePrice = service.giaDichVu;
+
+                  // Calculate employee commission
+                  const employeeCommissionRate = await getEmployeeCommissionRate(employeeId);
+                  const employeeCommission = (employeeCommissionRate / 100) * servicePrice;
+                  updates.hoaHongNhanVien = employeeCommission.toString();
+
+                  // Calculate management salary
+                  // Logic:
+                  // - If supervisor exists and different from employee → 20% of service price
+                  // - If supervisor is same as employee or no supervisor → (50% - employee commission)
+                  const hasSupervisor = supervisorId && supervisorId.trim() !== '';
+                  const isSupervisorDifferent = hasSupervisor &&
+                    supervisorId?.trim() !== employeeId?.trim();
+
+                  let managementSalary = 0;
+                  if (isSupervisorDifferent) {
+                    // Supervisor is different person → gets 20%
+                    managementSalary = (SUPERVISOR_COMMISSION_RATE / 100) * servicePrice;
+                  } else {
+                    // Manager does it themselves or no supervisor → gets remaining up to 50%
+                    managementSalary = Math.max(0, (50 / 100) * servicePrice - employeeCommission);
+                  }
+                  updates.luongQuanLy = managementSalary.toString();
+
+                  console.log('🔄 Recalculated commission on update:', {
+                    reason: updates.trangThai === 'Hoàn thành' ? 'Completing appointment' : 'Employee/Service/Supervisor changed',
+                    employee: employeeId,
+                    supervisor: supervisorId || 'None',
+                    isSupervisorDifferent,
+                    service: services[0],
+                    servicePrice,
+                    employeeCommissionRate: `${employeeCommissionRate}%`,
+                    employeeCommission: formatCommissionCurrency(employeeCommission),
+                    managementSalary: formatCommissionCurrency(managementSalary)
+                  });
+                } else {
+                  console.warn(`⚠️ Service "${services[0]}" not found, skipping commission recalculation`);
+                }
+              }
+            } catch (error) {
+              console.warn('⚠️ Commission recalculation failed:', error);
+            }
+          }
         }
 
         const updated = await updateRow(
@@ -159,13 +360,68 @@ export default async function handler(
           maLuot,
           updates
         );
-        
+
         if (!updated) {
           return res.status(500).json({ error: 'Không thể cập nhật lượt trị liệu' });
         }
-        
-        return res.status(200).json({ 
-          message: 'Cập nhật lượt trị liệu thành công' 
+
+        // If status changed from non-completed to completed, update treatment plan progress
+        if (updates.trangThai === 'Hoàn thành' &&
+            currentSession.trangThai !== 'Hoàn thành' &&
+            currentSession.maLieuTrinh) {
+
+          console.log('🎯 Session completed, recalculating treatment progress for:', currentSession.maLieuTrinh);
+
+          // Get treatment plan data
+          const treatmentPlan = await getRowById(
+            SHEETS.LIEU_TRINH,
+            mappingLieuTrinh,
+            'maLieuTrinh',
+            currentSession.maLieuTrinh
+          );
+
+          if (treatmentPlan) {
+            // Get all sessions for this treatment to calculate actual completed count
+            const allSessionsForTreatment = await getAllRows(SHEETS.LUOT_TRI_LIEU, mappingLuotTriLieu);
+            const completedSessionsForTreatment = allSessionsForTreatment.filter((session: LuotTriLieu) =>
+              session.maLieuTrinh === currentSession.maLieuTrinh &&
+              session.trangThai === 'Hoàn thành'
+            );
+
+            const actualCompletedCount = completedSessionsForTreatment.length;
+            const totalSessions = parseInt(treatmentPlan.soBuoi || '0');
+
+            console.log('📊 Treatment progress update:', {
+              calculatedFromActualSessions: actualCompletedCount,
+              total: totalSessions,
+              completedSessions: completedSessionsForTreatment.map((s: LuotTriLieu) => s.maLuot)
+            });
+
+            const treatmentUpdates: Partial<LieuTrinh> = {
+              soBuoiDaThucHien: actualCompletedCount.toString(),
+            };
+
+            // Mark treatment as completed if all sessions are done
+            if (actualCompletedCount >= totalSessions) {
+              treatmentUpdates.trangThai = 'Hoàn thành';
+              treatmentUpdates.ngayKetThuc = new Date().toISOString().split('T')[0];
+              console.log('🏁 Treatment plan completed!');
+            }
+
+            await updateRow(
+              SHEETS.LIEU_TRINH,
+              mappingLieuTrinh,
+              'maLieuTrinh',
+              currentSession.maLieuTrinh,
+              treatmentUpdates
+            );
+
+            console.log('✅ Treatment plan updated with actual session count');
+          }
+        }
+
+        return res.status(200).json({
+          message: 'Cập nhật lượt trị liệu thành công'
         });
 
       default:

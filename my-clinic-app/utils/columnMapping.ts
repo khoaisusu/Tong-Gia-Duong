@@ -34,6 +34,7 @@ export const mappingDichVu = {
   "Loại dịch vụ": "loaiDichVu",
   "Thời gian": "thoiGian",
   "Giá dịch vụ": "giaDichVu",
+  "Hoa hồng %": "hoaHongPercent",
   "Mô tả": "moTa",
   "Lợi ích": "loiIch",
   "Trạng thái": "trangThai"
@@ -84,6 +85,9 @@ export const mappingLuotTriLieu = {
   "Giờ kết thúc": "gioKetThuc",
   "Dịch vụ thực hiện": "dichVuThucHien",
   "Nhân viên thực hiện": "nhanVienThucHien",
+  "Người chỉnh": "nguoiChinh",
+  "Hoa hồng NV": "hoaHongNhanVien",
+  "Lương quản lý": "luongQuanLy",
   "Đánh giá": "danhGia",
   "Ghi chú": "ghiChu",
   "Trạng thái": "trangThai"
@@ -91,6 +95,7 @@ export const mappingLuotTriLieu = {
 
 export const mappingNhanVien = {
   "Mã NV": "maNhanVien",
+  "Mã NV ": "maNhanVien", // Handle trailing space in Google Sheets
   "Họ và tên": "hoVaTen",
   "Số điện thoại": "soDienThoai",
   "Email": "email",
@@ -100,6 +105,11 @@ export const mappingNhanVien = {
   "Quyền hạn": "quyenHan",
   "Trạng thái": "trangThai",
   "Hoa hồng %": "hoaHong",
+  "Lương cơ bản": "luongCoBan",
+  "Luong co ban": "luongCoBan", // Alternative without accents
+  "Lương CB": "luongCoBan", // Short form
+  "Phụ cấp": "phuCap",
+  "Phu cap": "phuCap", // Alternative without accents
   "Ngân hàng": "nganHang",
   "Số TK": "soTK"
 } as const;
@@ -127,8 +137,22 @@ export function mapRowToObject<T extends Record<string, string>>(
 ): Record<T[keyof T], string> {
   const obj: any = {};
 
+  console.log('🔍 mapRowToObject - Headers:', headers);
+  console.log('🔍 mapRowToObject - Row data:', row);
+  console.log('🔍 mapRowToObject - Mapping:', mapping);
+
   headers.forEach((header, index) => {
-    const field = mapping[header as keyof T];
+    // Try exact match first, then try trimmed version
+    let field = mapping[header as keyof T];
+
+    // If no match, try with trimmed header
+    if (!field) {
+      const trimmedHeader = header.trim();
+      field = mapping[trimmedHeader as keyof T];
+    }
+
+    console.log(`🔍 Header "${header}" -> Field "${field}" -> Value "${row[index] || ''}"`);
+
     if (field) {
       let value = row[index] || '';
 
@@ -151,6 +175,7 @@ export function mapRowToObject<T extends Record<string, string>>(
     }
   });
 
+  console.log('🔍 mapRowToObject - Final object:', obj);
   return obj;
 }
 
@@ -200,6 +225,7 @@ export type DichVu = {
   loaiDichVu: string;
   thoiGian: string;
   giaDichVu: string;
+  hoaHongPercent: string;
   moTa: string;
   loiIch: string;
   trangThai: string;
@@ -250,6 +276,9 @@ export type LuotTriLieu = {
   gioKetThuc: string;
   dichVuThucHien: string;
   nhanVienThucHien: string;
+  nguoiChinh: string;
+  hoaHongNhanVien: string;
+  luongQuanLy: string;
   danhGia: string;
   ghiChu: string;
   trangThai: string;
@@ -266,6 +295,8 @@ export type NhanVien = {
   quyenHan: string;
   trangThai: string;
   hoaHong: string;
+  luongCoBan: string;
+  phuCap: string;
   nganHang: string;
   soTK: string;
 };

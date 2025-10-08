@@ -16,6 +16,7 @@ import {
   XMarkIcon,
   HeartIcon,
   SparklesIcon,
+  ChartBarIcon,
 } from '@heroicons/react/24/outline';
 
 interface LayoutProps {
@@ -32,7 +33,8 @@ const menuItems = [
   { href: '/lieu-trinh', label: 'Liệu trình', icon: HeartIcon },
   { href: '/lich-hen', label: 'Lịch hẹn', icon: CalendarDaysIcon },
   { href: '/nhan-vien', label: 'Nhân viên', icon: UsersIcon },
-  { href: '/bao-cao', label: 'Báo cáo', icon: CurrencyDollarIcon },
+  { href: '/luong', label: 'Lương', icon: CurrencyDollarIcon },
+  { href: '/bao-cao', label: 'Báo cáo', icon: ChartBarIcon },
   { href: '/cai-dat', label: 'Cài đặt', icon: Cog6ToothIcon },
 ];
 
@@ -57,7 +59,7 @@ export default function Layout({ children, title }: LayoutProps) {
   const filteredMenuItems = menuItems.filter(item => {
     // Admin có quyền truy cập tất cả
     if (session?.user?.role === 'Admin') return true;
-    
+
     // Nhân viên không được truy cập một số trang
     const restrictedPaths = ['/nhan-vien', '/bao-cao', '/cai-dat'];
     return !restrictedPaths.includes(item.href);

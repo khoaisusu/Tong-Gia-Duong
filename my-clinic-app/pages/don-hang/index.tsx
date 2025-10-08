@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/router';
 import Layout from '../../components/Layout';
 import { 
@@ -13,16 +13,14 @@ import {
   ShoppingBagIcon,
   CalendarIcon,
   CurrencyDollarIcon,
-  QrCodeIcon,
 } from '@heroicons/react/24/outline';
 import { DonHang } from '../../utils/columnMapping';
 import { formatCurrency } from '../../utils/formatting';
-import QRCode from 'react-qr-code';
 import toast from 'react-hot-toast';
-import VietQRPayment from '../../components/VietQRPayment';
 
 export default function DonHangPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('Tất cả');
   const [dateRange, setDateRange] = useState({
@@ -30,7 +28,7 @@ export default function DonHangPage() {
     end: new Date().toISOString().split('T')[0],
   });
   const [selectedOrder, setSelectedOrder] = useState<DonHang | null>(null);
-  const [showQR, setShowQR] = useState(false);
+  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
 
   // Fetch orders
   const { data: orders = [], isLoading } = useQuery({
@@ -40,6 +38,8 @@ export default function DonHangPage() {
       if (!res.ok) throw new Error('Failed to fetch orders');
       const data = await res.json();
       console.log('🔍 Orders data from API:', data);
+      console.log('🔍 Sample order structure:', data[0]);
+      console.log('🔍 Payment statuses found:', Array.from(new Set(data.map((o: any) => o.trangThaiThanhToan))));
       return data;
     },
   });
@@ -104,7 +104,16 @@ export default function DonHangPage() {
 
   // Update payment status
   const updatePaymentStatus = async (orderId: string, newStatus: string) => {
+    // Prevent duplicate calls
+    if (updatingOrderId === orderId) {
+      console.log('⚠️ Update already in progress for order:', orderId);
+      return;
+    }
+
     try {
+      setUpdatingOrderId(orderId);
+      console.log('🔄 Updating payment status for order:', orderId, 'to:', newStatus);
+
       const res = await fetch(`/api/don-hang`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -113,13 +122,32 @@ export default function DonHangPage() {
           trangThaiThanhToan: newStatus,
         }),
       });
-      
+
       if (res.ok) {
-        toast.success('Cập nhật trạng thái thành công!');
-        // Refetch orders
+        const result = await res.json();
+
+        // Check if there were inventory warnings
+        if (result.warning && result.inventoryErrors) {
+          toast.success('Cập nhật trạng thái thành công!');
+          toast.error(`Cảnh báo kho hàng: ${result.inventoryErrors.join(', ')}`, {
+            duration: 6000
+          });
+          console.log('⚠️ Inventory warnings:', result.inventoryErrors);
+        } else {
+          toast.success('Cập nhật trạng thái thành công!');
+        }
+
+        // Refetch orders to get updated data
+        await queryClient.invalidateQueries({ queryKey: ['orders'] });
+        console.log('✅ Orders data refreshed');
+      } else {
+        throw new Error('Failed to update payment status');
       }
     } catch (error) {
+      console.error('❌ Error updating payment status:', error);
       toast.error('Có lỗi xảy ra!');
+    } finally {
+      setUpdatingOrderId(null);
     }
   };
 
@@ -241,7 +269,7 @@ export default function DonHangPage() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Mã đơn
+                      Tên thường gọi
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Khách hàng
@@ -276,15 +304,18 @@ export default function DonHangPage() {
                       trangThaiThanhToan: order.trangThaiThanhToan,
                       ghiChu: order.ghiChu
                     });
+
+                    // Find customer by maKhachHang to get tenThuongGoi
+                    const customer = customers.find((c: any) => c.maKhachHang === order.maKhachHang);
+
                     return (
                     <tr key={order.maDonHang} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {order.maDonHang}
+                        {customer?.tenThuongGoi || order.tenKhachHang}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div>
                           <div className="text-sm font-medium text-gray-900">{order.tenKhachHang}</div>
-                          <div className="text-sm text-gray-500">{order.maKhachHang}</div>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -323,18 +354,6 @@ export default function DonHangPage() {
                         >
                           <EyeIcon className="w-5 h-5" />
                         </button>
-                        {order.trangThaiThanhToan !== 'Đã thanh toán' && (
-                          <button
-                            onClick={() => {
-                              setSelectedOrder(order);
-                              setShowQR(true);
-                            }}
-                            className="text-purple-600 hover:text-purple-900 mr-3"
-                            title="Hiển thị QR thanh toán"
-                          >
-                            <QrCodeIcon className="w-5 h-5" />
-                          </button>
-                        )}
                         <button
                           onClick={() => window.print()}
                           className="text-gray-600 hover:text-gray-900"
@@ -360,62 +379,20 @@ export default function DonHangPage() {
       </div>
 
       {/* Order Details Modal */}
-      {selectedOrder && !showQR && (
-        <OrderDetailsModal 
+      {selectedOrder && (
+        <OrderDetailsModal
           order={selectedOrder}
           onClose={() => setSelectedOrder(null)}
           onUpdateStatus={updatePaymentStatus}
+          updatingOrderId={updatingOrderId}
         />
-      )}
-
-      {/* VietQR Payment Modal */}
-      {showQR && selectedOrder && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex items-center justify-center min-h-screen px-4">
-            <div className="fixed inset-0 bg-gray-500 bg-opacity-75" onClick={() => setShowQR(false)} />
-
-            <div className="relative bg-white rounded-lg max-w-lg w-full">
-              <VietQRPayment
-                paymentData={{
-                  orderId: selectedOrder.maDonHang,
-                  customerName: selectedOrder.tenKhachHang,
-                  totalAmount: parseFloat(selectedOrder.thanhTien || '0'),
-                  items: (() => {
-                    try {
-                      return JSON.parse(selectedOrder.danhSachSanPham || '[]').map((item: any) => ({
-                        name: item.tenSanPham || 'Sản phẩm',
-                        quantity: parseInt(item.soLuong || '1'),
-                        price: parseFloat(item.giaBan || '0')
-                      }));
-                    } catch (e) {
-                      return [{
-                        name: 'Đơn hàng ' + selectedOrder.maDonHang,
-                        quantity: 1,
-                        price: parseFloat(selectedOrder.thanhTien || '0')
-                      }];
-                    }
-                  })(),
-                  description: `Thanh toan don hang ${selectedOrder.maDonHang} - ${selectedOrder.tenKhachHang}`
-                }}
-                orderDetails={selectedOrder}
-                onPaymentComplete={(transactionRef) => {
-                  updatePaymentStatus(selectedOrder.maDonHang, 'Đã thanh toán');
-                  setShowQR(false);
-                  toast.success(`Thanh toán thành công! Mã giao dịch: ${transactionRef}`);
-                }}
-                onPaymentCancel={() => setShowQR(false)}
-                className="p-0"
-              />
-            </div>
-          </div>
-        </div>
       )}
     </Layout>
   );
 }
 
 // Order Details Modal Component
-function OrderDetailsModal({ order, onClose, onUpdateStatus }: any) {
+function OrderDetailsModal({ order, onClose, onUpdateStatus, updatingOrderId }: any) {
   const [services, setServices] = useState([]);
   const [products, setProducts] = useState([]);
   const [totalSessions, setTotalSessions] = useState(1);
@@ -592,18 +569,7 @@ function OrderDetailsModal({ order, onClose, onUpdateStatus }: any) {
             </div>
           )}
           
-          <div className="flex justify-end space-x-3">
-            {order.trangThaiThanhToan !== 'Đã thanh toán' && (
-              <button
-                onClick={() => {
-                  onUpdateStatus(order.maDonHang, 'Đã thanh toán');
-                  onClose();
-                }}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-              >
-                Đánh dấu đã thanh toán
-              </button>
-            )}
+          <div className="flex justify-end">
             <button
               onClick={onClose}
               className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"

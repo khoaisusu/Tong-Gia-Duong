@@ -307,6 +307,8 @@ function StaffFormModal({ staff, onClose, onSave }: any) {
     hoaHong: staff?.hoaHong || '10',
     nganHang: staff?.nganHang || '',
     soTK: staff?.soTK || '',
+    luongCoBan: staff?.luongCoBan || '0',
+    phuCap: staff?.phuCap || '0',
   });
 
   const handleSubmit = async (e: React.FormEvent) => {

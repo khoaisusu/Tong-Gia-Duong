@@ -9,6 +9,8 @@ import {
   generateId
 } from '../../utils/googleSheets';
 import { mappingDonHang, mappingGiaoDich, DonHang, GiaoDich } from '../../utils/columnMapping';
+import { getCompletedTransactionMap, updatePaymentStatusBasedOnTransactions } from '../../utils/paymentStatusSync';
+import { updateInventoryAfterSale, parseProductsFromOrder } from '../../utils/inventoryManager';
 
 export default async function handler(
   req: NextApiRequest,
@@ -25,13 +27,24 @@ export default async function handler(
       case 'GET':
         // Get all orders
         const orders = await getAllRows(SHEETS.DON_HANG, mappingDonHang);
+        console.log('🔍 Raw orders from Google Sheets:', orders);
 
-        // Add default payment status for orders that don't have it
-        const ordersWithStatus = orders.map((order: DonHang) => ({
-          ...order,
-          trangThaiThanhToan: order.trangThaiThanhToan ||
-            (order.ghiChu?.includes('Đã Thanh Toán') ? 'Đã thanh toán' : 'Chưa thanh toán')
-        }));
+        // Get completed transactions map
+        const completedTransactions = await getCompletedTransactionMap();
+
+        // Update payment status based on transactions and fallback logic
+        const ordersWithStatus = updatePaymentStatusBasedOnTransactions(
+          orders,
+          completedTransactions,
+          'maDonHang',
+          'trangThaiThanhToan',
+          (order: DonHang) => order.ghiChu?.includes('Đã Thanh Toán') ? 'Đã thanh toán' : 'Chưa thanh toán'
+        );
+
+        console.log('🔍 Orders after processing:', ordersWithStatus.map((o: any) => ({
+          maDonHang: o.maDonHang,
+          trangThaiThanhToan: o.trangThaiThanhToan
+        })));
 
         return res.status(200).json(ordersWithStatus);
 
@@ -58,7 +71,7 @@ export default async function handler(
         // Create order
         await appendRow(SHEETS.DON_HANG, mappingDonHang, orderData);
         
-        // Create transaction record if payment is completed
+        // Create transaction record and update inventory if payment is completed
         if (orderData.trangThaiThanhToan === 'Đã thanh toán') {
           const transaction: Partial<GiaoDich> = {
             maGiaoDich: generateId('GD'),
@@ -73,8 +86,23 @@ export default async function handler(
             trangThai: 'Hoàn thành',
             nhanVienXuLy: orderData.nhanVienTao,
           };
-          
+
           await appendRow(SHEETS.GIAO_DICH, mappingGiaoDich, transaction);
+
+          // Update inventory for sold products
+          const soldProducts = parseProductsFromOrder(orderData.danhSachSanPham || '[]');
+          if (soldProducts.length > 0) {
+            console.log('📦 Updating inventory for', soldProducts.length, 'products');
+            const inventoryResult = await updateInventoryAfterSale(soldProducts);
+
+            if (!inventoryResult.success && inventoryResult.errors.length > 0) {
+              console.log('⚠️ Inventory update had errors:', inventoryResult.errors);
+              // Note: We don't fail the order creation, just log the errors
+              // The order is still created but inventory might not be perfectly accurate
+            } else {
+              console.log('✅ Inventory updated successfully for order:', orderData.maDonHang);
+            }
+          }
         }
         
         return res.status(201).json({ 
@@ -111,8 +139,8 @@ export default async function handler(
           return res.status(500).json({ error: 'Không thể cập nhật đơn hàng' });
         }
         
-        // Create transaction if payment status changed to paid
-        if (currentOrder.trangThaiThanhToan !== 'Đã thanh toán' && 
+        // Create transaction and update inventory if payment status changed to paid
+        if (currentOrder.trangThaiThanhToan !== 'Đã thanh toán' &&
             updates.trangThaiThanhToan === 'Đã thanh toán') {
           const transaction: Partial<GiaoDich> = {
             maGiaoDich: generateId('GD'),
@@ -127,8 +155,27 @@ export default async function handler(
             trangThai: 'Hoàn thành',
             nhanVienXuLy: session.user?.name || session.user?.email || '',
           };
-          
+
           await appendRow(SHEETS.GIAO_DICH, mappingGiaoDich, transaction);
+
+          // Update inventory for sold products
+          const soldProducts = parseProductsFromOrder(currentOrder.danhSachSanPham || '[]');
+          if (soldProducts.length > 0) {
+            console.log('📦 Updating inventory for payment confirmation of order:', maDonHang);
+            const inventoryResult = await updateInventoryAfterSale(soldProducts);
+
+            if (!inventoryResult.success && inventoryResult.errors.length > 0) {
+              console.log('⚠️ Inventory update had errors:', inventoryResult.errors);
+              // Return warning but don't fail the payment update
+              return res.status(200).json({
+                message: 'Cập nhật đơn hàng thành công',
+                warning: 'Có lỗi khi cập nhật kho hàng',
+                inventoryErrors: inventoryResult.errors
+              });
+            } else {
+              console.log('✅ Inventory updated successfully for order:', maDonHang);
+            }
+          }
         }
         
         return res.status(200).json({ 

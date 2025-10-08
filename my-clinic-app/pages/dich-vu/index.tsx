@@ -253,6 +253,7 @@ function ServiceForm({ service, categories, isLoading, onClose, onSave }: any) {
     moTa: service?.moTa || '',
     loiIch: service?.loiIch || '',
     trangThai: service?.trangThai || 'Đang Kinh Doanh',
+    hoaHongPercent: service?.hoaHongPercent || '0',
   });
 
   const handleSubmit = (e: React.FormEvent) => {

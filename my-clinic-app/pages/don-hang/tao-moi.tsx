@@ -401,12 +401,12 @@ export default function CreateTreatmentPage() {
   // Generate QR content
   const generateQRContent = () => {
     if (!treatmentData || !selectedCustomer) return '';
-    
-    const bankAccount = '1234567890';
-    const bankCode = 'VIETCOMBANK';
+
+    const bankAccount = '0965982216';
+    const bankCode = 'SHINHANBANK';
     const amount = treatmentData.conLai;
     const content = `LT${treatmentData.maLieuTrinh} ${selectedCustomer.tenThuongGoi || selectedCustomer.hoVaTen}`;
-    
+
     return `${bankCode}|${bankAccount}|${amount}|${content}`;
   };
 

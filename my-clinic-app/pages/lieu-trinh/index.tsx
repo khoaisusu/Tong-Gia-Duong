@@ -62,24 +62,73 @@ export default function LieuTrinhPage() {
     'Hủy'
   ];
 
-  // Filter treatments
-  const filteredTreatments = treatments.filter((treatment: LieuTrinh) => {
-    const searchLower = searchTerm.toLowerCase();
+  // Calculate progress percentage
+  const calculateProgress = (treatment: LieuTrinh) => {
+    const completed = parseInt(treatment.soBuoiDaThucHien || '0');
+    const total = parseInt(treatment.soBuoi || '0');
+    return total > 0 ? (completed / total) * 100 : 0;
+  };
 
-    // Find customer by customer code to get phone number
-    const customer = customers.find((c: KhachHang) => c.maKhachHang === treatment.maKhachHang);
+  // Extract service names from JSON string
+  const getServiceNames = (servicesJsonString: string): string => {
+    try {
+      if (!servicesJsonString || servicesJsonString.trim() === '' || servicesJsonString === '[]') {
+        return '';
+      }
 
-    const matchesSearch =
-      treatment.maLieuTrinh?.toLowerCase().includes(searchLower) ||
-      treatment.tenKhachHang?.toLowerCase().includes(searchLower) ||
-      customer?.soDienThoai?.includes(searchTerm) ||
-      customer?.hoVaTen?.toLowerCase().includes(searchLower) ||
-      customer?.tenThuongGoi?.toLowerCase().includes(searchLower);
+      const services = JSON.parse(servicesJsonString);
+      if (Array.isArray(services) && services.length > 0) {
+        return services.map(service => service.tenDichVu).join(', ');
+      }
+      return '';
+    } catch (error) {
+      console.warn('Error parsing services JSON:', error);
+      return '';
+    }
+  };
 
-    const matchesStatus = selectedStatus === 'Tất cả' || treatment.trangThai === selectedStatus;
+  // Filter and sort treatments
+  const filteredTreatments = treatments
+    .filter((treatment: LieuTrinh) => {
+      // First filter: Remove invalid/empty treatments
+      if (!treatment || !treatment.maLieuTrinh || !treatment.tenKhachHang) {
+        return false;
+      }
 
-    return matchesSearch && matchesStatus;
-  });
+      const searchLower = searchTerm.toLowerCase();
+
+      // Find customer by customer code to get phone number
+      const customer = customers.find((c: KhachHang) => c.maKhachHang === treatment.maKhachHang);
+
+      const matchesSearch =
+        treatment.maLieuTrinh?.toLowerCase().includes(searchLower) ||
+        treatment.tenKhachHang?.toLowerCase().includes(searchLower) ||
+        customer?.soDienThoai?.includes(searchTerm) ||
+        customer?.hoVaTen?.toLowerCase().includes(searchLower) ||
+        customer?.tenThuongGoi?.toLowerCase().includes(searchLower);
+
+      const matchesStatus = selectedStatus === 'Tất cả' || treatment.trangThai === selectedStatus;
+
+      return matchesSearch && matchesStatus;
+    })
+    .filter((treatment: LieuTrinh, index: number, self: LieuTrinh[]) =>
+      // Remove duplicates by keeping only first occurrence of each maLieuTrinh
+      index === self.findIndex((t: LieuTrinh) => t.maLieuTrinh === treatment.maLieuTrinh)
+    )
+    .sort((a: LieuTrinh, b: LieuTrinh) => {
+      // Calculate completion status for each treatment
+      const progressA = calculateProgress(a);
+      const progressB = calculateProgress(b);
+      const isCompletedA = progressA >= 100 || a.trangThai === 'Hoàn thành';
+      const isCompletedB = progressB >= 100 || b.trangThai === 'Hoàn thành';
+
+      // Sort incomplete treatments first, then completed ones
+      if (!isCompletedA && isCompletedB) return -1;
+      if (isCompletedA && !isCompletedB) return 1;
+
+      // Within the same completion status, sort by start date (newest first)
+      return new Date(b.ngayBatDau || 0).getTime() - new Date(a.ngayBatDau || 0).getTime();
+    });
 
   // Calculate statistics
   const stats = {
@@ -91,14 +140,6 @@ export default function LieuTrinhPage() {
       return sum + (isNaN(amount) ? 0 : amount);
     }, 0),
   };
-
-  // Calculate progress percentage
-  const calculateProgress = (treatment: LieuTrinh) => {
-    const completed = parseInt(treatment.soBuoiDaThucHien || '0');
-    const total = parseInt(treatment.soBuoi || '0');
-    return total > 0 ? (completed / total) * 100 : 0;
-  };
-
 
   // Add new session
   const addSession = async (treatmentId: string) => {
@@ -198,13 +239,21 @@ export default function LieuTrinhPage() {
                   s.maLieuTrinh === treatment.maLieuTrinh
                 );
                 
+                // Check if treatment is completed (reached max sessions or marked as completed)
+                const isCompleted = progress >= 100 || treatment.trangThai === 'Hoàn thành';
+
                 return (
-                  <div key={treatment.maLieuTrinh} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                  <div key={treatment.maLieuTrinh} className={`border rounded-lg p-4 hover:shadow-md transition-shadow ${
+                    isCompleted
+                      ? 'border-green-300 bg-green-50 ring-2 ring-green-200'
+                      : 'border-gray-200'
+                  }`}>
                     {/* Treatment Header */}
                     <div className="flex items-start justify-between mb-3">
                       <div>
-                        <h3 className="font-semibold text-gray-900">{treatment.tenLieuTrinh}</h3>
-                        <p className="text-sm text-gray-600">{treatment.tenKhachHang}</p>
+                        <h3 className="font-semibold text-gray-900 uppercase">{treatment.tenLieuTrinh}</h3>
+                        <p className="text-sm text-black font-bold uppercase">{treatment.tenKhachHang}</p>
+                        <p className="text-xs text-blue-600 font-medium">{getServiceNames(treatment.danhSachDichVu)}</p>
                         <p className="text-xs text-gray-500">#{treatment.maLieuTrinh}</p>
                       </div>
                       <span className={`px-2 py-1 text-xs font-medium rounded-full ${
@@ -223,12 +272,23 @@ export default function LieuTrinhPage() {
                     {/* Progress Bar */}
                     <div className="mb-3">
                       <div className="flex justify-between text-xs text-gray-600 mb-1">
-                        <span>Tiến độ</span>
-                        <span>{treatment.soBuoiDaThucHien}/{treatment.soBuoi} buổi</span>
+                        <div className="flex items-center">
+                          <span>Tiến độ</span>
+                          {isCompleted && (
+                            <CheckCircleIcon className="w-4 h-4 ml-1 text-green-600" />
+                          )}
+                        </div>
+                        <span className={isCompleted ? 'text-green-600 font-semibold' : ''}>
+                          {treatment.soBuoiDaThucHien || 0}/{treatment.soBuoi || 0} buổi
+                        </span>
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div 
-                          className="bg-primary-600 h-2 rounded-full transition-all"
+                        <div
+                          className={`h-2 rounded-full transition-all ${
+                            isCompleted
+                              ? 'bg-green-500'
+                              : 'bg-primary-600'
+                          }`}
                           style={{ width: `${progress}%` }}
                         />
                       </div>
@@ -236,16 +296,18 @@ export default function LieuTrinhPage() {
                     
                     {/* Treatment Info */}
                     <div className="space-y-2 mb-3">
-                      <div className="flex items-center text-sm text-gray-600">
-                        <CalendarDaysIcon className="w-4 h-4 mr-2" />
-                        <span>{new Date(treatment.ngayBatDau).toLocaleDateString('vi-VN')}</span>
-                        {treatment.ngayKetThuc && (
-                          <>
-                            <span className="mx-1">→</span>
-                            <span>{new Date(treatment.ngayKetThuc).toLocaleDateString('vi-VN')}</span>
-                          </>
-                        )}
-                      </div>
+                      {treatment.ngayBatDau && (
+                        <div className="flex items-center text-sm text-gray-600">
+                          <CalendarDaysIcon className="w-4 h-4 mr-2" />
+                          <span>{new Date(treatment.ngayBatDau).toLocaleDateString('vi-VN')}</span>
+                          {treatment.ngayKetThuc && (
+                            <>
+                              <span className="mx-1">→</span>
+                              <span>{new Date(treatment.ngayKetThuc).toLocaleDateString('vi-VN')}</span>
+                            </>
+                          )}
+                        </div>
+                      )}
                       
                     </div>
                     
@@ -254,7 +316,7 @@ export default function LieuTrinhPage() {
                       <div className="mb-3 pt-3 border-t">
                         <p className="text-xs text-gray-600 mb-1">Buổi gần nhất:</p>
                         <p className="text-sm">
-                          {treatmentSessions[0].dichVuThucHien} - {new Date(treatmentSessions[0].ngayThucHien).toLocaleDateString('vi-VN')}
+                          {new Date(treatmentSessions[0].ngayThucHien).toLocaleDateString('vi-VN')}
                         </p>
                       </div>
                     )}
@@ -350,12 +412,28 @@ function TreatmentDetailsModal({ treatment, sessions, onClose }: any) {
             </div>
             <div>
               <p className="text-sm text-gray-600">Tiến độ</p>
-              <p className="font-medium">{treatment.soBuoiDaThucHien}/{treatment.soBuoi} buổi</p>
+              <p className="font-medium">{treatment.soBuoiDaThucHien || 0}/{treatment.soBuoi || 0} buổi</p>
             </div>
             <div>
               <p className="text-sm text-gray-600">Trạng thái</p>
               <p className="font-medium">{treatment.trangThai}</p>
             </div>
+            {treatment.ngayBatDau && (
+              <div>
+                <p className="text-sm text-gray-600">Ngày bắt đầu</p>
+                <p className="font-medium">
+                  {new Date(treatment.ngayBatDau).toLocaleDateString('vi-VN')}
+                </p>
+              </div>
+            )}
+            {treatment.ngayKetThuc && (
+              <div>
+                <p className="text-sm text-gray-600">Ngày kết thúc</p>
+                <p className="font-medium">
+                  {new Date(treatment.ngayKetThuc).toLocaleDateString('vi-VN')}
+                </p>
+              </div>
+            )}
           </div>
           
           {services.length > 0 && (
@@ -394,7 +472,7 @@ function TreatmentDetailsModal({ treatment, sessions, onClose }: any) {
                       <div>
                         <p className="font-medium">{session.dichVuThucHien}</p>
                         <p className="text-sm text-gray-600">
-                          {new Date(session.ngayThucHien).toLocaleDateString('vi-VN')} - {session.gioBatDau} → {session.gioKetThuc}
+                          {session.ngayThucHien ? new Date(session.ngayThucHien).toLocaleDateString('vi-VN') : 'Chưa có ngày'} - {session.gioBatDau} → {session.gioKetThuc}
                         </p>
                         <p className="text-sm text-gray-600">Nhân viên: {session.nhanVienThucHien}</p>
                       </div>

@@ -20,7 +20,6 @@ import {
   GlobeAltIcon,
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
-import { VIETNAMESE_BANKS } from '../../utils/vietqr';
 
 export default function CaiDatPage() {
   const { data: session } = useSession();
@@ -68,7 +67,6 @@ export default function CaiDatPage() {
     accountNumber: '19070220842011',
     accountName: 'PHONG KHAM TONG GIA DUONG',
     branch: 'Chi nhánh HCM',
-    qrPrefix: 'TGD',
     vatRate: 10,
     defaultPaymentMethod: 'Tiền mặt',
   });
@@ -76,15 +74,9 @@ export default function CaiDatPage() {
   // Update payment settings when bank data is loaded
   useEffect(() => {
     if (activeBankSetting) {
-      // Find matching bank in VIETNAMESE_BANKS by name
-      const matchingBank = Object.values(VIETNAMESE_BANKS).find(
-        bank => bank.name.toLowerCase().includes(activeBankSetting.tenNganHang?.toLowerCase()) ||
-                bank.displayName.toLowerCase().includes(activeBankSetting.tenNganHang?.toLowerCase())
-      );
-
       setPaymentSettings(prev => ({
         ...prev,
-        bankBin: activeBankSetting.maBin || matchingBank?.bin || '970416',
+        bankBin: activeBankSetting.maBin || '970416',
         bankName: activeBankSetting.tenNganHang || 'Techcombank',
         accountNumber: activeBankSetting.soTaiKhoan || '19070220842011',
         accountName: activeBankSetting.tenTaiKhoan || 'PHONG KHAM TONG GIA DUONG',
@@ -146,11 +138,8 @@ export default function CaiDatPage() {
     if (activeTab === 'payment') {
       setIsSaving(true);
 
-      // Find the selected bank details
-      const selectedBank = Object.values(VIETNAMESE_BANKS).find(bank => bank.bin === paymentSettings.bankBin);
-
       const bankData = {
-        tenNganHang: selectedBank?.displayName || paymentSettings.bankName,
+        tenNganHang: paymentSettings.bankName,
         maBin: paymentSettings.bankBin,
         soTaiKhoan: paymentSettings.accountNumber,
         tenTaiKhoan: paymentSettings.accountName,
@@ -353,26 +342,28 @@ export default function CaiDatPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Ngân hàng
+                          Mã BIN ngân hàng
                         </label>
-                        <select
+                        <input
+                          type="text"
                           value={paymentSettings.bankBin}
-                          onChange={(e) => {
-                            const selectedBank = Object.values(VIETNAMESE_BANKS).find(bank => bank.bin === e.target.value);
-                            setPaymentSettings({
-                              ...paymentSettings,
-                              bankBin: e.target.value,
-                              bankName: selectedBank?.name || ''
-                            });
-                          }}
+                          onChange={(e) => setPaymentSettings({ ...paymentSettings, bankBin: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                        >
-                          {Object.values(VIETNAMESE_BANKS).map((bank) => (
-                            <option key={bank.bin} value={bank.bin}>
-                              {bank.displayName} ({bank.name})
-                            </option>
-                          ))}
-                        </select>
+                          placeholder="VD: 970416"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Tên ngân hàng
+                        </label>
+                        <input
+                          type="text"
+                          value={paymentSettings.bankName}
+                          onChange={(e) => setPaymentSettings({ ...paymentSettings, bankName: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          placeholder="VD: Techcombank"
+                        />
                       </div>
                       
                       <div>
@@ -414,35 +405,8 @@ export default function CaiDatPage() {
                   </div>
 
                   <div>
-                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                      <h4 className="text-sm font-semibold text-blue-800 mb-2">
-                        Tích hợp VietQR - Thanh toán QR Code
-                      </h4>
-                      <p className="text-sm text-blue-700 mb-2">
-                        Hệ thống hỗ trợ tạo mã QR thanh toán tuân thủ tiêu chuẩn VietQR của Việt Nam,
-                        tương thích với tất cả {Object.values(VIETNAMESE_BANKS).length} ngân hàng được tích hợp.
-                      </p>
-                      <div className="text-xs text-blue-600">
-                        <strong>Ngân hàng được hỗ trợ:</strong> {Object.values(VIETNAMESE_BANKS).map(bank => bank.name).join(', ')}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
                     <h3 className="text-md font-medium mb-4">Cài đặt khác</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Tiền tố mã QR
-                        </label>
-                        <input
-                          type="text"
-                          value={paymentSettings.qrPrefix}
-                          onChange={(e) => setPaymentSettings({ ...paymentSettings, qrPrefix: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                        />
-                      </div>
-                      
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           Thuế VAT (%)

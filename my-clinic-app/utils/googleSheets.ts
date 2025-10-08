@@ -71,7 +71,12 @@ export async function getAllRows<T extends Record<string, string>>(
     }
 
     const [headers, ...rows] = values;
+    console.log(`🔍 [${sheetName}] Headers from sheet:`, headers);
+    console.log(`🔍 [${sheetName}] Mapping being used:`, mapping);
+    console.log(`🔍 [${sheetName}] First row data:`, rows[0]);
+
     const mappedData = rows.map(row => mapRowToObject(headers, row, mapping));
+    console.log(`🔍 [${sheetName}] First mapped object:`, mappedData[0]);
 
     return mappedData;
   } catch (error) {
@@ -98,17 +103,21 @@ export async function appendRow<T extends Record<string, string>>(
   const sheets = await getSheetsClient();
   
   try {
+    console.log(`📝 Getting headers for sheet "${sheetName}"`);
+
     // Get headers to ensure correct column order
     const headerResponse = await sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
       range: `${sheetName}!1:1`,
     });
-    
+
     let headers = headerResponse.data.values?.[0];
-    
+    console.log('📝 Current headers:', headers);
+
     // If no headers exist, create them
     if (!headers || headers.length === 0) {
       headers = Object.keys(mapping);
+      console.log('📝 Creating new headers:', headers);
       await sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
         range: `${sheetName}!A1`,
@@ -118,12 +127,21 @@ export async function appendRow<T extends Record<string, string>>(
         },
       });
     }
-    
-    // Map data to row
-    const row = mapObjectToRow(data, mapping);
-    
+
+    // Map data to row using actual sheet headers order
+    const row = headers.map(header => {
+      const field = mapping[header as keyof typeof mapping];
+      const value = field ? (data[field] || '') : '';
+      console.log(`📝 Header "${header}" -> Field "${field}" -> Value "${value}"`);
+      return value;
+    });
+    console.log('📝 Mapped row data:', row);
+    console.log('📝 Data being appended:', data);
+    console.log('📝 Headers order:', headers);
+
     // Append the row
-    await sheets.spreadsheets.values.append({
+    console.log(`📝 Appending to sheet "${sheetName}" range "A:Z"`);
+    const appendResult = await sheets.spreadsheets.values.append({
       spreadsheetId: SPREADSHEET_ID,
       range: `${sheetName}!A:Z`,
       valueInputOption: 'USER_ENTERED',
@@ -132,8 +150,11 @@ export async function appendRow<T extends Record<string, string>>(
         values: [row],
       },
     });
+
+    console.log('📝 Append result:', appendResult.data);
+    console.log('✅ Successfully appended row to Google Sheets');
   } catch (error) {
-    console.error(`Error appending row to ${sheetName}:`, error);
+    console.error(`❌ Error appending row to ${sheetName}:`, error);
     throw error;
   }
 }

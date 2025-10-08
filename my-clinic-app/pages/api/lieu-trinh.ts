@@ -1,14 +1,15 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from './auth/[...nextauth]';
-import { 
-  getAllRows, 
+import {
+  getAllRows,
   appendRow,
   updateRow,
   SHEETS,
   generateId
 } from '../../utils/googleSheets';
-import { mappingLieuTrinh, mappingGiaoDich, LieuTrinh, GiaoDich } from '../../utils/columnMapping';
+import { mappingLieuTrinh, mappingGiaoDich, mappingLuotTriLieu, LieuTrinh, GiaoDich, LuotTriLieu } from '../../utils/columnMapping';
+import { getCompletedTransactionMap, updatePaymentStatusBasedOnTransactions } from '../../utils/paymentStatusSync';
 
 export default async function handler(
   req: NextApiRequest,
@@ -26,12 +27,36 @@ export default async function handler(
         // Get all treatments
         const treatments = await getAllRows(SHEETS.LIEU_TRINH, mappingLieuTrinh);
 
-        // Add default payment status for treatments that don't have it
-        const treatmentsWithStatus = treatments.map((treatment: LieuTrinh) => ({
-          ...treatment,
-          trangThaiThanhToan: treatment.trangThaiThanhToan ||
-            (treatment.ghiChu?.includes('Đã Thanh Toán') ? 'Đã thanh toán' : 'Chưa thanh toán')
-        }));
+        // Get all treatment sessions to calculate actual completed sessions
+        const allSessions = await getAllRows(SHEETS.LUOT_TRI_LIEU, mappingLuotTriLieu);
+
+        // Calculate actual completed sessions for each treatment
+        const treatmentsWithActualSessions = treatments.map((treatment: LieuTrinh) => {
+          const completedSessions = allSessions.filter((session: LuotTriLieu) =>
+            session.maLieuTrinh === treatment.maLieuTrinh &&
+            session.trangThai === 'Hoàn thành'
+          );
+
+          const actualCompletedCount = completedSessions.length.toString();
+
+          // Update the soBuoiDaThucHien with the actual count
+          return {
+            ...treatment,
+            soBuoiDaThucHien: actualCompletedCount
+          };
+        });
+
+        // Get completed transactions map
+        const completedTransactions = await getCompletedTransactionMap();
+
+        // Update payment status based on transactions and fallback logic
+        const treatmentsWithStatus = updatePaymentStatusBasedOnTransactions(
+          treatmentsWithActualSessions,
+          completedTransactions,
+          'maLieuTrinh',
+          'trangThaiThanhToan',
+          (treatment: LieuTrinh) => treatment.ghiChu?.includes('Đã Thanh Toán') ? 'Đã thanh toán' : 'Chưa thanh toán'
+        );
 
         return res.status(200).json(treatmentsWithStatus);
 
