@@ -562,14 +562,44 @@ function OrderDetailsModal({ order, onClose, onUpdateStatus, updatingOrderId }: 
             </table>
           </div>
           
+          {/* VietQR Payment Section */}
+          {(order.trangThaiThanhToan === 'Chưa thanh toán' || order.trangThaiThanhToan === 'Thanh toán một phần') && (
+            <div className="mb-6 flex justify-center">
+              <img
+                src={`https://img.vietqr.io/image/techcombank-19035401605011-compact2.jpg?amount=${parseFloat(order.thanhTien || '0')}&addInfo=DH%20${order.maDonHang}&accountName=Phong%20Kham`}
+                alt="VietQR Code"
+                className="w-64 h-auto"
+              />
+            </div>
+          )}
+
           {order.ghiChu && (
             <div className="mb-6">
               <p className="text-sm text-gray-600">Ghi chú</p>
               <p className="mt-1">{order.ghiChu}</p>
             </div>
           )}
-          
-          <div className="flex justify-end">
+
+          <div className="flex justify-end gap-3">
+            {(order.trangThaiThanhToan === 'Chưa thanh toán' || order.trangThaiThanhToan === 'Thanh toán một phần') && (
+              <button
+                onClick={() => onUpdateStatus(order.maDonHang, 'Đã thanh toán')}
+                disabled={updatingOrderId === order.maDonHang}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+              >
+                {updatingOrderId === order.maDonHang ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Đang cập nhật...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircleIcon className="w-5 h-5 mr-2" />
+                    Xác nhận đã thanh toán
+                  </>
+                )}
+              </button>
+            )}
             <button
               onClick={onClose}
               className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"

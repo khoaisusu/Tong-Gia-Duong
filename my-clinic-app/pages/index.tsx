@@ -13,6 +13,7 @@ import {
   ChartBarIcon,
   ArrowTrendingUpIcon,
   HeartIcon,
+  CubeIcon,
 } from '@heroicons/react/24/outline';
 import { formatCurrency } from '../utils/formatting';
 
@@ -34,10 +35,10 @@ export default function DashboardPage() {
     queryFn: async () => {
       console.log('🔄 Bắt đầu fetch dashboard data...');
       const startTime = Date.now();
-      
+
       try {
         console.log('📡 Gọi API parallel...');
-        const [customers, orders, treatments, transactions] = await Promise.all([
+        const [customers, orders, treatments, transactions, appointments] = await Promise.all([
           fetch('/api/khach-hang').then(async res => {
             console.log('✅ Khách hàng API:', res.status);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -78,6 +79,16 @@ export default function DashboardPage() {
             console.error('❌ Lỗi API giao dịch:', err);
             return [];
           }),
+          fetch('/api/lich-hen').then(async res => {
+            console.log('✅ Lịch hẹn API:', res.status);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            console.log('📊 Lịch hẹn data:', Array.isArray(data) ? `${data.length} records` : 'Invalid data');
+            return data;
+          }).catch(err => {
+            console.error('❌ Lỗi API lịch hẹn:', err);
+            return [];
+          }),
         ]);
 
         // Calculate statistics
@@ -88,10 +99,82 @@ export default function DashboardPage() {
 
         const endTime = Date.now();
         console.log(`⏱️ Dashboard data fetch hoàn thành trong ${endTime - startTime}ms`);
-        
+
+        // Get today's appointments
+        const todayAppointments = Array.isArray(appointments) ? appointments
+          .filter((a: any) => {
+            if (!a.ngayHen) return false;
+            const appointmentDate = new Date(a.ngayHen);
+            return appointmentDate.toDateString() === today.toDateString();
+          })
+          .sort((a: any, b: any) => {
+            const timeA = a.gioHen || '00:00';
+            const timeB = b.gioHen || '00:00';
+            return timeA.localeCompare(timeB);
+          })
+          .slice(0, 4) : [];
+
+        // Get recent activities
+        const recentActivities: any[] = [];
+
+        // Add new customers
+        if (Array.isArray(customers)) {
+          customers
+            .filter((c: any) => c.ngayTao)
+            .sort((a: any, b: any) => new Date(b.ngayTao).getTime() - new Date(a.ngayTao).getTime())
+            .slice(0, 2)
+            .forEach((c: any) => {
+              recentActivities.push({
+                type: 'customer',
+                title: 'Khách hàng mới',
+                description: `${c.hoVaTen} - ${c.soDienThoai}`,
+                time: c.ngayTao,
+                color: 'green'
+              });
+            });
+        }
+
+        // Add new treatments
+        if (Array.isArray(treatments)) {
+          treatments
+            .filter((t: any) => t.ngayBatDau)
+            .sort((a: any, b: any) => new Date(b.ngayBatDau).getTime() - new Date(a.ngayBatDau).getTime())
+            .slice(0, 2)
+            .forEach((t: any) => {
+              recentActivities.push({
+                type: 'treatment',
+                title: 'Liệu trình mới',
+                description: `${t.tenLieuTrinh || 'Liệu trình'} - ${t.soLuotDieuTri || 0} buổi`,
+                time: t.ngayBatDau,
+                color: 'blue'
+              });
+            });
+        }
+
+        // Add recent payments
+        if (Array.isArray(transactions)) {
+          transactions
+            .filter((t: any) => t.ngayGiaoDich && t.loaiGiaoDich === 'Thu')
+            .sort((a: any, b: any) => new Date(b.ngayGiaoDich).getTime() - new Date(a.ngayGiaoDich).getTime())
+            .slice(0, 2)
+            .forEach((t: any) => {
+              recentActivities.push({
+                type: 'payment',
+                title: 'Thanh toán',
+                description: `${t.noiDung || 'Thanh toán'} - ${formatCurrency(parseFloat(t.soTien || 0))}`,
+                time: t.ngayGiaoDich,
+                color: 'purple'
+              });
+            });
+        }
+
+        // Sort by time and take top 5
+        recentActivities.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+        const topActivities = recentActivities.slice(0, 5);
+
         const stats = {
           totalCustomers: Array.isArray(customers) ? customers.length : 0,
-          newCustomersMonth: Array.isArray(customers) ? customers.filter((c: any) => 
+          newCustomersMonth: Array.isArray(customers) ? customers.filter((c: any) =>
             c.ngayTao && new Date(c.ngayTao) >= startOfMonth
           ).length : 0,
           totalOrders: Array.isArray(orders) ? orders.length : 0,
@@ -100,20 +183,33 @@ export default function DashboardPage() {
             const orderDate = new Date(o.ngayTao);
             return orderDate.toDateString() === today.toDateString();
           }).length : 0,
-          activeTreatments: Array.isArray(treatments) ? treatments.filter((t: any) => 
-            t.trangThai === 'Đang thực hiện'
-          ).length : 0,
-          monthlyRevenue: Array.isArray(transactions) ? transactions
-            .filter((t: any) => t.ngayGiaoDich && new Date(t.ngayGiaoDich) >= startOfMonth)
-            .reduce((sum: number, t: any) => sum + parseFloat(t.soTien || 0), 0) : 0,
-          weeklyRevenue: Array.isArray(transactions) ? transactions
-            .filter((t: any) => t.ngayGiaoDich && new Date(t.ngayGiaoDich) >= startOfWeek)
-            .reduce((sum: number, t: any) => sum + parseFloat(t.soTien || 0), 0) : 0,
+          activeTreatments: Array.isArray(treatments) ? treatments.filter((t: any) => {
+            const isActive = t.trangThai === 'Đang thực hiện';
+            // Debug log to verify status values
+            if (t.trangThai && t.trangThai.includes('thực hiện')) {
+              console.log('🔍 Treatment status found:', t.trangThai, 'Match:', isActive);
+            }
+            return isActive;
+          }).length : 0,
+          monthlyRevenue: Array.isArray(orders) ? orders
+            .filter((o: any) =>
+              o.ngayTao &&
+              new Date(o.ngayTao) >= startOfMonth
+            )
+            .reduce((sum: number, o: any) => sum + parseFloat(o.thanhTien || 0), 0) : 0,
+          weeklyRevenue: Array.isArray(orders) ? orders
+            .filter((o: any) =>
+              o.ngayTao &&
+              new Date(o.ngayTao) >= startOfWeek
+            )
+            .reduce((sum: number, o: any) => sum + parseFloat(o.thanhTien || 0), 0) : 0,
           pendingPayments: Array.isArray(orders) ? orders
             .filter((o: any) => o.trangThaiThanhToan === 'Chưa thanh toán')
             .reduce((sum: number, o: any) => sum + parseFloat(o.thanhTien || 0), 0) : 0,
+          todayAppointments,
+          recentActivities: topActivities,
         };
-        
+
         console.log('📈 Stats tính toán:', stats);
         return stats;
       } catch (error) {
@@ -128,6 +224,8 @@ export default function DashboardPage() {
           monthlyRevenue: 0,
           weeklyRevenue: 0,
           pendingPayments: 0,
+          todayAppointments: [],
+          recentActivities: [],
         };
       }
     },
@@ -194,7 +292,7 @@ export default function DashboardPage() {
   const quickActions = [
     { label: 'Thêm khách hàng', href: '/khach-hang', icon: UserGroupIcon, color: 'bg-blue-500' },
     { label: 'Tạo đơn hàng', href: '/don-hang/tao-moi', icon: ShoppingBagIcon, color: 'bg-green-500' },
-    { label: 'Tạo liệu trình', href: '/lieu-trinh/tao-moi', icon: HeartIcon, color: 'bg-purple-500' },
+    { label: 'Sản phẩm', href: '/san-pham', icon: CubeIcon, color: 'bg-purple-500' },
     { label: 'Lịch hẹn hôm nay', href: '/lich-hen', icon: CalendarDaysIcon, color: 'bg-orange-500' },
   ];
 
@@ -324,36 +422,47 @@ export default function DashboardPage() {
               <ChartBarIcon className="w-5 h-5 text-gray-400" />
             </div>
             <div className="space-y-3">
-              <div className="flex items-center justify-between py-2 border-b">
-                <div className="flex items-center">
-                  <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Khách hàng mới</p>
-                    <p className="text-xs text-gray-500">Nguyễn Văn A - 10:30</p>
-                  </div>
+              {stats?.recentActivities && stats.recentActivities.length > 0 ? (
+                stats.recentActivities.map((activity: any, index: number) => {
+                  const timeAgo = (() => {
+                    const now = new Date();
+                    const activityTime = new Date(activity.time);
+                    const diffMs = now.getTime() - activityTime.getTime();
+                    const diffMins = Math.floor(diffMs / 60000);
+                    const diffHours = Math.floor(diffMs / 3600000);
+                    const diffDays = Math.floor(diffMs / 86400000);
+
+                    if (diffMins < 60) return `${diffMins} phút trước`;
+                    if (diffHours < 24) return `${diffHours} giờ trước`;
+                    return `${diffDays} ngày trước`;
+                  })();
+
+                  const colorClasses = {
+                    green: 'bg-green-500',
+                    blue: 'bg-blue-500',
+                    purple: 'bg-purple-500',
+                    orange: 'bg-orange-500',
+                    red: 'bg-red-500',
+                  };
+
+                  return (
+                    <div key={index} className="flex items-center justify-between py-2 border-b last:border-b-0">
+                      <div className="flex items-center">
+                        <div className={`w-2 h-2 ${colorClasses[activity.color as keyof typeof colorClasses] || 'bg-gray-500'} rounded-full mr-3`}></div>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{activity.title}</p>
+                          <p className="text-xs text-gray-500">{activity.description}</p>
+                        </div>
+                      </div>
+                      <span className="text-xs text-gray-500">{timeAgo}</span>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <p className="text-sm">Chưa có hoạt động nào</p>
                 </div>
-                <span className="text-xs text-gray-500">2 giờ trước</span>
-              </div>
-              <div className="flex items-center justify-between py-2 border-b">
-                <div className="flex items-center">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full mr-3"></div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Liệu trình mới</p>
-                    <p className="text-xs text-gray-500">Gói xoa bóp toàn thân - 5 buổi</p>
-                  </div>
-                </div>
-                <span className="text-xs text-gray-500">3 giờ trước</span>
-              </div>
-              <div className="flex items-center justify-between py-2 border-b">
-                <div className="flex items-center">
-                  <div className="w-2 h-2 bg-purple-500 rounded-full mr-3"></div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Thanh toán</p>
-                    <p className="text-xs text-gray-500">Đơn hàng #DH001 - 500,000đ</p>
-                  </div>
-                </div>
-                <span className="text-xs text-gray-500">4 giờ trước</span>
-              </div>
+              )}
             </div>
           </div>
 
@@ -364,42 +473,42 @@ export default function DashboardPage() {
               <CalendarDaysIcon className="w-5 h-5 text-gray-400" />
             </div>
             <div className="space-y-3">
-              <div className="flex items-center justify-between py-2 border-b">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">09:00 - Trần Thị B</p>
-                  <p className="text-xs text-gray-500">Xoa bóp bấm huyệt</p>
+              {stats?.todayAppointments && stats.todayAppointments.length > 0 ? (
+                stats.todayAppointments.map((appointment: any, index: number) => {
+                  const currentTime = new Date().toTimeString().slice(0, 5);
+                  const appointmentTime = appointment.gioHen || '00:00';
+                  const isPast = appointmentTime < currentTime;
+                  const isUpcoming = !isPast && (parseInt(appointmentTime.split(':')[0]) - parseInt(currentTime.split(':')[0])) <= 1;
+
+                  const statusConfig = appointment.trangThai === 'Hoàn thành'
+                    ? { label: 'Hoàn thành', bg: 'bg-green-100', text: 'text-green-800' }
+                    : appointment.trangThai === 'Đã hủy'
+                    ? { label: 'Đã hủy', bg: 'bg-red-100', text: 'text-red-800' }
+                    : isUpcoming
+                    ? { label: 'Sắp tới', bg: 'bg-yellow-100', text: 'text-yellow-800' }
+                    : { label: 'Chờ', bg: 'bg-gray-100', text: 'text-gray-600' };
+
+                  return (
+                    <div key={index} className="flex items-center justify-between py-2 border-b last:border-b-0">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">
+                          {appointmentTime} - {appointment.tenKhachHang || 'Khách hàng'}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {appointment.dichVu || 'Không có thông tin dịch vụ'}
+                        </p>
+                      </div>
+                      <span className={`px-2 py-1 text-xs font-medium ${statusConfig.bg} ${statusConfig.text} rounded-full`}>
+                        {statusConfig.label}
+                      </span>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <p className="text-sm">Không có lịch hẹn nào hôm nay</p>
                 </div>
-                <span className="px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">
-                  Sắp tới
-                </span>
-              </div>
-              <div className="flex items-center justify-between py-2 border-b">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">10:30 - Lê Văn C</p>
-                  <p className="text-xs text-gray-500">Châm cứu</p>
-                </div>
-                <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-600 rounded-full">
-                  Chờ
-                </span>
-              </div>
-              <div className="flex items-center justify-between py-2 border-b">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">14:00 - Phạm Thị D</p>
-                  <p className="text-xs text-gray-500">Điều trị đau lưng</p>
-                </div>
-                <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-600 rounded-full">
-                  Chờ
-                </span>
-              </div>
-              <div className="flex items-center justify-between py-2">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">16:00 - Hoàng Văn E</p>
-                  <p className="text-xs text-gray-500">Phục hồi chức năng</p>
-                </div>
-                <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-600 rounded-full">
-                  Chờ
-                </span>
-              </div>
+              )}
             </div>
             <Link
               href="/lich-hen"

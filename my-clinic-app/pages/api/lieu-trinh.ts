@@ -6,7 +6,8 @@ import {
   appendRow,
   updateRow,
   SHEETS,
-  generateId
+  generateId,
+  generateSequentialId
 } from '../../utils/googleSheets';
 import { mappingLieuTrinh, mappingGiaoDich, mappingLuotTriLieu, LieuTrinh, GiaoDich, LuotTriLieu } from '../../utils/columnMapping';
 import { getCompletedTransactionMap, updatePaymentStatusBasedOnTransactions } from '../../utils/paymentStatusSync';
@@ -98,7 +99,7 @@ export default async function handler(
         // Generate treatment ID and set defaults
         const treatmentData = {
           ...newTreatment,
-          maLieuTrinh: generateId('LT'),
+          maLieuTrinh: await generateSequentialId('LT', SHEETS.LIEU_TRINH, mappingLieuTrinh, 'maLieuTrinh'),
           // Keep the provided treatment name, don't override with auto-generated number
           tenLieuTrinh: newTreatment.tenLieuTrinh || autoTreatmentName,
           ngayBatDau: newTreatment.ngayBatDau || new Date().toISOString().split('T')[0],

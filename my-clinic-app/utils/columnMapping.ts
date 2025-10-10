@@ -88,6 +88,9 @@ export const mappingLuotTriLieu = {
   "Người chỉnh": "nguoiChinh",
   "Hoa hồng NV": "hoaHongNhanVien",
   "Lương quản lý": "luongQuanLy",
+  "Dịch vụ thêm": "dichVuThem",
+  "Nhân viên thực hiện DV thêm": "nhanVienThucHienDVThem",
+  "Hoa hồng dịch vụ thêm": "hoaHongDichVuThem",
   "Đánh giá": "danhGia",
   "Ghi chú": "ghiChu",
   "Trạng thái": "trangThai"
@@ -116,7 +119,9 @@ export const mappingNhanVien = {
 
 export const mappingGiaoDich = {
   "Mã GD": "maGiaoDich",
+  "Mã Giao Dịch": "maGiaoDich", // Full version from Google Sheets
   "Loại GD": "loaiGiaoDich",
+  "Loại Giao Dịch": "loaiGiaoDich", // Full version from Google Sheets
   "Mã tham chiếu": "maThamChieu",
   "Mã KH": "maKhachHang",
   "Tên khách hàng": "tenKhachHang",
@@ -126,6 +131,17 @@ export const mappingGiaoDich = {
   "Nội dung": "noiDung",
   "Trạng thái": "trangThai",
   "Nhân viên xử lý": "nhanVienXuLy"
+} as const;
+
+export const mappingHoaHong = {
+  "Mã hoa hồng": "maHoaHong",
+  "Mã NV": "maNhanVien",
+  "Tên nhân viên": "tenNhanVien",
+  "Mã DV": "maDichVu",
+  "Tên dịch vụ": "tenDichVu",
+  "Tỷ lệ hoa hồng": "tyLeHoaHong",
+  "Ngày áp dụng": "ngayApDung",
+  "Ghi chú": "ghiChu"
 } as const;
 
 
@@ -279,6 +295,9 @@ export type LuotTriLieu = {
   nguoiChinh: string;
   hoaHongNhanVien: string;
   luongQuanLy: string;
+  dichVuThem: string;
+  nhanVienThucHienDVThem: string;
+  hoaHongDichVuThem: string;
   danhGia: string;
   ghiChu: string;
   trangThai: string;
@@ -313,5 +332,16 @@ export type GiaoDich = {
   noiDung: string;
   trangThai: string;
   nhanVienXuLy: string;
+};
+
+export type HoaHong = {
+  maHoaHong: string;
+  maNhanVien: string;
+  tenNhanVien: string;
+  maDichVu: string;
+  tenDichVu: string;
+  tyLeHoaHong: string;
+  ngayApDung: string;
+  ghiChu: string;
 };
 

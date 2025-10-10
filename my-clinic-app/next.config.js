@@ -8,6 +8,8 @@ const nextConfig = {
     domains: [
       'lh3.googleusercontent.com', // Google profile images
       'storage.googleapis.com',    // Google Cloud Storage
+      'cdn.vietqr.io',             // VietQR bank logos
+      'img.vietqr.io',             // VietQR payment QR codes
     ],
   },
 

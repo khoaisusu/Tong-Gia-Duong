@@ -33,7 +33,7 @@ const menuItems = [
   { href: '/lieu-trinh', label: 'Liệu trình', icon: HeartIcon },
   { href: '/lich-hen', label: 'Lịch hẹn', icon: CalendarDaysIcon },
   { href: '/nhan-vien', label: 'Nhân viên', icon: UsersIcon },
-  { href: '/luong', label: 'Lương', icon: CurrencyDollarIcon },
+  { href: '/luong-chi-tiet', label: 'Lương', icon: CurrencyDollarIcon },
   { href: '/bao-cao', label: 'Báo cáo', icon: ChartBarIcon },
   { href: '/cai-dat', label: 'Cài đặt', icon: Cog6ToothIcon },
 ];

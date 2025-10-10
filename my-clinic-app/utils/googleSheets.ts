@@ -50,6 +50,7 @@ export const SHEETS = {
   LUOT_TRI_LIEU: 'Lượt trị liệu',
   NHAN_VIEN: 'Nhân viên',
   GIAO_DICH: 'Giao dịch',
+  HOA_HONG: 'Hoa hồng',
 } as const;
 
 // Helper functions for CRUD operations
@@ -287,10 +288,49 @@ export async function deleteRow<T extends Record<string, string>>(
   }
 }
 
-// Utility function to generate unique IDs
+// Utility function to generate unique IDs (legacy - for backward compatibility)
 export function generateId(prefix: string): string {
   const timestamp = Date.now().toString(36);
   const randomStr = Math.random().toString(36).substr(2, 5);
   return `${prefix}${timestamp}${randomStr}`.toUpperCase();
+}
+
+// Generate sequential ID (DH0001, DH0002, LT0001, LT0002, etc.)
+export async function generateSequentialId<T extends Record<string, string>>(
+  prefix: string,
+  sheetName: string,
+  mapping: T,
+  idField: string
+): Promise<string> {
+  try {
+    const allRows = await getAllRows(sheetName, mapping);
+
+    // Extract numbers from existing IDs
+    const existingNumbers = allRows
+      .map(row => {
+        const id = row[idField];
+        if (!id || typeof id !== 'string') return 0;
+
+        // Extract digits after prefix (DH0001 -> 0001, LT0023 -> 0023)
+        const match = id.match(new RegExp(`^${prefix}(\\d+)$`));
+        return match ? parseInt(match[1], 10) : 0;
+      })
+      .filter(num => num > 0);
+
+    // Find max number and increment
+    const maxNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) : 0;
+    const nextNumber = maxNumber + 1;
+
+    // Format with 4 digits
+    const formattedNumber = nextNumber.toString().padStart(4, '0');
+
+    console.log(`📝 Generated sequential ID: ${prefix}${formattedNumber} (previous max: ${maxNumber})`);
+
+    return `${prefix}${formattedNumber}`;
+  } catch (error) {
+    console.error(`❌ Error generating sequential ID for ${prefix}:`, error);
+    // Fallback to timestamp-based ID if there's an error
+    return generateId(prefix);
+  }
 }
 

@@ -332,15 +332,6 @@ export default function LieuTrinhPage() {
                           <EyeIcon className="w-5 h-5" />
                         </button>
                       </div>
-                      
-                      {treatment.trangThai === 'Đang thực hiện' && (
-                        <button
-                          onClick={() => addSession(treatment.maLieuTrinh)}
-                          className="px-3 py-1 bg-primary-600 text-white text-sm rounded hover:bg-primary-700"
-                        >
-                          + Thêm buổi
-                        </button>
-                      )}
                     </div>
                   </div>
                 );

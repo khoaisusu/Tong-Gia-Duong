@@ -1,12 +1,13 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from './auth/[...nextauth]';
-import { 
-  getAllRows, 
+import {
+  getAllRows,
   appendRow,
   updateRow,
   SHEETS,
-  generateId
+  generateId,
+  generateSequentialId
 } from '../../utils/googleSheets';
 import { mappingDonHang, mappingGiaoDich, DonHang, GiaoDich } from '../../utils/columnMapping';
 import { getCompletedTransactionMap, updatePaymentStatusBasedOnTransactions } from '../../utils/paymentStatusSync';
@@ -62,7 +63,7 @@ export default async function handler(
         // Generate order ID if not provided
         const orderData = {
           ...newOrder,
-          maDonHang: newOrder.maDonHang || generateId('DH'),
+          maDonHang: newOrder.maDonHang || await generateSequentialId('DH', SHEETS.DON_HANG, mappingDonHang, 'maDonHang'),
           ngayTao: newOrder.ngayTao || new Date().toISOString().split('T')[0],
           nhanVienTao: session.user?.name || session.user?.email || '',
           trangThaiThanhToan: newOrder.trangThaiThanhToan || 'Chưa thanh toán',
