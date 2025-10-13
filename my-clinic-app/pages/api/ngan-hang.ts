@@ -22,56 +22,37 @@ export default async function handler(
   try {
     switch (req.method) {
       case 'GET':
-        try {
-          // Get all staff data to extract bank info
-          const staffData = await getAllRows(SHEETS.NHAN_VIEN, mappingNhanVien);
-          console.log('📊 Staff data from sheet:', staffData);
+        // Return list of Vietnamese banks for dropdown selection
+        const vietnameseBanks = [
+          { maNganHang: 'VCB', tenNganHang: 'Vietcombank', maBin: '970436' },
+          { maNganHang: 'TCB', tenNganHang: 'Techcombank', maBin: '970416' },
+          { maNganHang: 'BIDV', tenNganHang: 'BIDV', maBin: '970418' },
+          { maNganHang: 'VTB', tenNganHang: 'Vietinbank', maBin: '970415' },
+          { maNganHang: 'ACB', tenNganHang: 'ACB', maBin: '970416' },
+          { maNganHang: 'MB', tenNganHang: 'MB Bank', maBin: '970422' },
+          { maNganHang: 'TPB', tenNganHang: 'TPBank', maBin: '970423' },
+          { maNganHang: 'VPB', tenNganHang: 'VPBank', maBin: '970432' },
+          { maNganHang: 'SHB', tenNganHang: 'SHB', maBin: '970443' },
+          { maNganHang: 'SCB', tenNganHang: 'Sacombank', maBin: '970429' },
+          { maNganHang: 'EXB', tenNganHang: 'Eximbank', maBin: '970431' },
+          { maNganHang: 'MSB', tenNganHang: 'MSB', maBin: '970426' },
+          { maNganHang: 'HDBank', tenNganHang: 'HDBank', maBin: '970437' },
+          { maNganHang: 'OCB', tenNganHang: 'OCB', maBin: '970448' },
+          { maNganHang: 'VIB', tenNganHang: 'VIB', maBin: '970441' },
+          { maNganHang: 'ABBank', tenNganHang: 'ABBank', maBin: '970425' },
+          { maNganHang: 'Agribank', tenNganHang: 'Agribank', maBin: '970405' },
+          { maNganHang: 'SeABank', tenNganHang: 'SeABank', maBin: '970440' },
+          { maNganHang: 'NCB', tenNganHang: 'NCB', maBin: '970419' },
+          { maNganHang: 'LienVietPostBank', tenNganHang: 'LienVietPostBank', maBin: '970449' },
+          { maNganHang: 'PVcomBank', tenNganHang: 'PVcomBank', maBin: '970412' },
+          { maNganHang: 'BaoVietBank', tenNganHang: 'BaoVietBank', maBin: '970438' },
+          { maNganHang: 'VietBank', tenNganHang: 'VietBank', maBin: '970433' },
+          { maNganHang: 'BacABank', tenNganHang: 'Bac A Bank', maBin: '970409' },
+          { maNganHang: 'VietCapitalBank', tenNganHang: 'VietCapital Bank', maBin: '970454' },
+        ];
 
-          // Find staff with bank information (assuming admin/owner has bank info)
-          const staffWithBank = staffData.find((staff: NhanVien) =>
-            staff.nganHang && staff.soTK && staff.quyenHan === 'Admin'
-          ) || staffData.find((staff: NhanVien) =>
-            staff.nganHang && staff.soTK
-          );
-
-          if (staffWithBank) {
-            const bankSettings = [{
-              tenNganHang: staffWithBank.nganHang,
-              maBin: '970416', // Default for Techcombank - you can enhance this mapping
-              soTaiKhoan: staffWithBank.soTK,
-              tenTaiKhoan: staffWithBank.hoVaTen?.toUpperCase() || 'PHONG KHAM TONG GIA DUONG',
-              chiNhanh: 'Chi nhánh HCM', // Default branch
-              trangThai: 'Hoạt động'
-            }];
-
-            console.log('📊 Extracted bank settings:', bankSettings);
-            return res.status(200).json(bankSettings);
-          } else {
-            // Return default settings if no bank info found
-            const defaultSettings = [{
-              tenNganHang: 'Techcombank',
-              maBin: '970416',
-              soTaiKhoan: '19070220842011',
-              tenTaiKhoan: 'PHONG KHAM TONG GIA DUONG',
-              chiNhanh: 'Chi nhánh HCM',
-              trangThai: 'Hoạt động'
-            }];
-            console.log('📋 No bank info found in staff sheet, returning default settings');
-            return res.status(200).json(defaultSettings);
-          }
-        } catch (error) {
-          console.log('📋 Error reading staff sheet, returning default settings');
-          // Return default settings if sheet read fails
-          const defaultSettings = [{
-            tenNganHang: 'Techcombank',
-            maBin: '970416',
-            soTaiKhoan: '19070220842011',
-            tenTaiKhoan: 'PHONG KHAM TONG GIA DUONG',
-            chiNhanh: 'Chi nhánh HCM',
-            trangThai: 'Hoạt động'
-          }];
-          return res.status(200).json(defaultSettings);
-        }
+        console.log('📊 Returning list of Vietnamese banks:', vietnameseBanks.length);
+        return res.status(200).json(vietnameseBanks);
 
       case 'POST':
         // This method is not needed as we'll update staff record directly

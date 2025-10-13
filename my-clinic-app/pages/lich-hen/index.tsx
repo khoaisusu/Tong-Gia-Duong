@@ -14,7 +14,7 @@ import {
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import { KhachHang, DichVu, NhanVien, LuotTriLieu, LieuTrinh } from '../../utils/columnMapping';
-import { calculateSupervisorCommission, calculateEmployeeCommission } from '../../utils/commissionCalculator';
+import { calculateSupervisorCommission, calculateEmployeeCommission } from '../../utils/commissionValidators';
 
 interface Appointment {
   id: string;
@@ -598,6 +598,7 @@ function AppointmentFormModal({ onClose, onSave }: any) {
   const [customerSearch, setCustomerSearch] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<KhachHang | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [additionalServices, setAdditionalServices] = useState<{ service: string; staff: string }[]>([]);
 
   // Initialize jQuery datepicker
   useEffect(() => {
@@ -749,6 +750,59 @@ function AppointmentFormModal({ onClose, onSave }: any) {
     customer.soDienThoai?.includes(customerSearch) ||
     customer.maKhachHang?.toLowerCase().includes(customerSearch.toLowerCase())
   );
+
+  // Get available services from selected treatment plan (excluding main services)
+  const getAvailableServices = (): string[] => {
+    if (!selectedTreatmentPlan?.danhSachDichVu) return [];
+
+    try {
+      const services = JSON.parse(selectedTreatmentPlan.danhSachDichVu);
+      if (Array.isArray(services)) {
+        return services
+          .map((s: any) => s.tenDichVu || s)
+          .filter((serviceName: string) => {
+            // Exclude services with "xoa bóp" or "massage" - these are main services
+            const lowerName = serviceName.toLowerCase();
+            return !lowerName.includes('xoa bóp') && !lowerName.includes('massage');
+          });
+      }
+    } catch (error) {
+      const servicesList = selectedTreatmentPlan.danhSachDichVu
+        .split(',')
+        .map((s: string) => s.trim())
+        .filter((serviceName: string) => {
+          if (!serviceName) return false;
+          const lowerName = serviceName.toLowerCase();
+          return !lowerName.includes('xoa bóp') && !lowerName.includes('massage');
+        });
+      return servicesList;
+    }
+    return [];
+  };
+
+  // Add additional service
+  const addAdditionalService = () => {
+    const availableServices = getAvailableServices();
+    const activeStaff = staff.filter((s: NhanVien) => s.trangThai === 'Hoạt động');
+    if (availableServices.length > 0 && activeStaff.length > 0) {
+      setAdditionalServices([...additionalServices, {
+        service: availableServices[0],
+        staff: activeStaff[0].hoVaTen
+      }]);
+    }
+  };
+
+  // Remove additional service
+  const removeAdditionalService = (index: number) => {
+    setAdditionalServices(additionalServices.filter((_, i) => i !== index));
+  };
+
+  // Update additional service
+  const updateAdditionalService = (index: number, field: 'service' | 'staff', value: string) => {
+    const updated = [...additionalServices];
+    updated[index][field] = value;
+    setAdditionalServices(updated);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -947,6 +1001,93 @@ function AppointmentFormModal({ onClose, onSave }: any) {
         const responseData = await res.json();
         console.log('✅ API Success response:', responseData);
 
+        // Get the created appointment ID from response
+        const createdAppointmentId = responseData.data?.maLuot;
+
+        // Save additional services if any
+        if (additionalServices.length > 0 && createdAppointmentId) {
+          console.log('💾 Saving additional services for appointment:', createdAppointmentId);
+
+          // Fetch all services and staff data
+          const servicesRes = await fetch('/api/dich-vu');
+          if (!servicesRes.ok) throw new Error('Failed to fetch services');
+          const servicesData = await servicesRes.json();
+
+          const staffRes = await fetch('/api/nhan-vien');
+          if (!staffRes.ok) throw new Error('Failed to fetch staff');
+          const staffData = await staffRes.json();
+
+          // Save each additional service
+          for (const item of additionalServices) {
+            try {
+              // Find service details
+              const service = servicesData.find((s: DichVu) => s.tenDichVu === item.service);
+              if (!service) {
+                console.warn(`Service not found: ${item.service}`);
+                continue;
+              }
+
+              // Find staff details
+              const staffMember = staffData.find((s: NhanVien) => s.hoVaTen === item.staff);
+              if (!staffMember) {
+                console.warn(`Staff not found: ${item.staff}`);
+                continue;
+              }
+
+              const servicePrice = parseFloat(service.giaDichVu || '0');
+
+              // Fetch commission rate
+              let commissionRate = 0;
+              let commission = 0;
+
+              try {
+                const commissionRes = await fetch(`/api/hoa-hong?maDichVu=${service.maDichVu}`);
+                if (commissionRes.ok) {
+                  const commissions = await commissionRes.json();
+                  const staffCommission = commissions.find((c: any) =>
+                    c.tenNhanVien === item.staff && c.maDichVu === service.maDichVu
+                  );
+
+                  if (staffCommission) {
+                    commissionRate = parseFloat(staffCommission.tyLeHoaHong || '0');
+                    commission = (servicePrice * commissionRate) / 100;
+                  }
+                }
+              } catch (error) {
+                console.warn('Error fetching commission:', error);
+              }
+
+              // Create detail record
+              const detailData = {
+                maLuot: createdAppointmentId,
+                maDichVu: service.maDichVu,
+                tenDichVu: service.tenDichVu,
+                maNhanVien: staffMember.maNhanVien,
+                tenNhanVien: staffMember.hoVaTen,
+                giaDichVu: servicePrice.toString(),
+                tyLeHoaHong: commissionRate.toString(),
+                hoaHong: commission.toFixed(0),
+                ngayThucHien: formattedDate,
+                ghiChu: '',
+              };
+
+              const response = await fetch('/api/chi-tiet-dich-vu-them', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(detailData),
+              });
+
+              if (!response.ok) {
+                console.error(`Failed to save additional service: ${item.service}`);
+              } else {
+                console.log(`✅ Saved additional service: ${item.service}`);
+              }
+            } catch (error) {
+              console.error(`Error saving service ${item.service}:`, error);
+            }
+          }
+        }
+
         // Invalidate and refetch treatment sessions data
         queryClient.invalidateQueries({ queryKey: ['treatment-sessions'] });
 
@@ -1049,9 +1190,6 @@ function AppointmentFormModal({ onClose, onSave }: any) {
                   required
                   readOnly
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  Chọn ngày từ hôm nay trở đi
-                </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1069,9 +1207,6 @@ function AppointmentFormModal({ onClose, onSave }: any) {
                     required
                   />
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Giờ làm việc: 7:00 - 20:00 (bước 15 phút)
-                </p>
               </div>
             </div>
 
@@ -1117,10 +1252,63 @@ function AppointmentFormModal({ onClose, onSave }: any) {
                   ))
                 }
               </select>
-              <p className="text-xs text-gray-500 mt-1">
-                Lương quản lý = (% người chỉnh - % nhân viên) × giá dịch vụ
-              </p>
             </div>
+
+            {/* Additional Services Section */}
+            {selectedTreatmentPlan && getAvailableServices().length > 0 && (
+              <div className="border-t pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Dịch vụ thêm
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addAdditionalService}
+                    className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                  >
+                    + Thêm dịch vụ
+                  </button>
+                </div>
+
+                {additionalServices.length > 0 && (
+                  <div className="space-y-2">
+                    {additionalServices.map((item, index) => (
+                      <div key={index} className="flex items-center gap-2">
+                        <select
+                          value={item.service}
+                          onChange={(e) => updateAdditionalService(index, 'service', e.target.value)}
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500 text-sm"
+                        >
+                          {getAvailableServices().map((service, sIdx) => (
+                            <option key={sIdx} value={service}>
+                              {service}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={item.staff}
+                          onChange={(e) => updateAdditionalService(index, 'staff', e.target.value)}
+                          className="w-40 px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500 text-sm"
+                        >
+                          {staff.filter((s: NhanVien) => s.trangThai === 'Hoạt động').map((staffMember: NhanVien) => (
+                            <option key={staffMember.maNhanVien} value={staffMember.hoVaTen}>
+                              {staffMember.hoVaTen}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => removeAdditionalService(index)}
+                          className="text-red-600 hover:text-red-700 px-2 text-lg"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Notes */}
             <div>

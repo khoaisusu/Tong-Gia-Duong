@@ -311,6 +311,16 @@ function StaffFormModal({ staff, onClose, onSave }: any) {
     phuCap: staff?.phuCap || '0',
   });
 
+  // Fetch banks
+  const { data: banks = [] } = useQuery({
+    queryKey: ['banks'],
+    queryFn: async () => {
+      const res = await fetch('/api/ngan-hang');
+      if (!res.ok) throw new Error('Failed to fetch banks');
+      return res.json();
+    },
+  });
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -453,7 +463,38 @@ function StaffFormModal({ staff, onClose, onSave }: any) {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
                 />
               </div>
-              
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Ngân hàng
+                </label>
+                <select
+                  value={formData.nganHang}
+                  onChange={(e) => setFormData({ ...formData, nganHang: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
+                >
+                  <option value="">Chọn ngân hàng</option>
+                  {banks.map((bank: any) => (
+                    <option key={bank.maNganHang} value={bank.tenNganHang}>
+                      {bank.tenNganHang}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Số tài khoản
+                </label>
+                <input
+                  type="text"
+                  value={formData.soTK}
+                  onChange={(e) => setFormData({ ...formData, soTK: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
+                  placeholder="Nhập số tài khoản"
+                />
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Trạng thái
