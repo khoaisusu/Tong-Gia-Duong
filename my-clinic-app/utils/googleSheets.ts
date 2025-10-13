@@ -51,6 +51,7 @@ export const SHEETS = {
   NHAN_VIEN: 'Nhân viên',
   GIAO_DICH: 'Giao dịch',
   HOA_HONG: 'Hoa hồng',
+  CHI_TIET_DICH_VU_THEM: 'Chi tiết dịch vụ thêm',
 } as const;
 
 // Helper functions for CRUD operations

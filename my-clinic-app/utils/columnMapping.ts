@@ -10,6 +10,9 @@ export const mappingKhachHang = {
   "Giới tính": "gioiTinh",
   "Địa chỉ": "diaChi",
   "Tiền sử bệnh": "tienSuBenh",
+  "Chẩn đoán": "chanDoan",
+  "Điều trị": "dieuTri",
+  "Kết quả": "ketQua",
   "Ghi chú": "ghiChu",
   "Ngày tạo": "ngayTao",
   "Trạng thái ": "trangThai",
@@ -88,9 +91,6 @@ export const mappingLuotTriLieu = {
   "Người chỉnh": "nguoiChinh",
   "Hoa hồng NV": "hoaHongNhanVien",
   "Lương quản lý": "luongQuanLy",
-  "Dịch vụ thêm": "dichVuThem",
-  "Nhân viên thực hiện DV thêm": "nhanVienThucHienDVThem",
-  "Hoa hồng dịch vụ thêm": "hoaHongDichVuThem",
   "Đánh giá": "danhGia",
   "Ghi chú": "ghiChu",
   "Trạng thái": "trangThai"
@@ -141,6 +141,20 @@ export const mappingHoaHong = {
   "Tên dịch vụ": "tenDichVu",
   "Tỷ lệ hoa hồng": "tyLeHoaHong",
   "Ngày áp dụng": "ngayApDung",
+  "Ghi chú": "ghiChu"
+} as const;
+
+export const mappingChiTietDichVuThem = {
+  "Mã chi tiết": "maChiTiet",
+  "Mã lượt": "maLuot",
+  "Mã dịch vụ": "maDichVu",
+  "Tên dịch vụ": "tenDichVu",
+  "Mã nhân viên": "maNhanVien",
+  "Tên nhân viên": "tenNhanVien",
+  "Giá dịch vụ": "giaDichVu",
+  "Tỷ lệ hoa hồng": "tyLeHoaHong",
+  "Hoa hồng": "hoaHong",
+  "Ngày thực hiện": "ngayThucHien",
   "Ghi chú": "ghiChu"
 } as const;
 
@@ -217,6 +231,9 @@ export type KhachHang = {
   gioiTinh: string;
   diaChi: string;
   tienSuBenh: string;
+  chanDoan: string;
+  dieuTri: string;
+  ketQua: string;
   ghiChu: string;
   ngayTao: string;
   trangThai: string;
@@ -295,9 +312,6 @@ export type LuotTriLieu = {
   nguoiChinh: string;
   hoaHongNhanVien: string;
   luongQuanLy: string;
-  dichVuThem: string;
-  nhanVienThucHienDVThem: string;
-  hoaHongDichVuThem: string;
   danhGia: string;
   ghiChu: string;
   trangThai: string;
@@ -342,6 +356,20 @@ export type HoaHong = {
   tenDichVu: string;
   tyLeHoaHong: string;
   ngayApDung: string;
+  ghiChu: string;
+};
+
+export type ChiTietDichVuThem = {
+  maChiTiet: string;
+  maLuot: string;
+  maDichVu: string;
+  tenDichVu: string;
+  maNhanVien: string;
+  tenNhanVien: string;
+  giaDichVu: string;
+  tyLeHoaHong: string;
+  hoaHong: string;
+  ngayThucHien: string;
   ghiChu: string;
 };
 

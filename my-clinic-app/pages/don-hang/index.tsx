@@ -156,8 +156,9 @@ export default function DonHangPage() {
       <div className="space-y-6">
         {/* Header */}
         <div className="bg-white rounded-lg shadow-sm p-4">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div className="flex-1 max-w-lg">
+          <div className="flex flex-col gap-4">
+            {/* Search Bar */}
+            <div className="w-full">
               <div className="relative">
                 <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
@@ -169,27 +170,28 @@ export default function DonHangPage() {
                 />
               </div>
             </div>
-            
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
+
+            {/* Date Range and Create Button */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
                 <input
                   type="date"
                   value={dateRange.start}
                   onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
-                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  className="flex-1 min-w-0 px-2 py-2 border border-gray-300 rounded-lg text-sm"
                 />
-                <span className="text-gray-500">đến</span>
+                <span className="text-gray-500 text-sm flex-shrink-0">đến</span>
                 <input
                   type="date"
                   value={dateRange.end}
                   onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
-                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  className="flex-1 min-w-0 px-2 py-2 border border-gray-300 rounded-lg text-sm"
                 />
               </div>
-              
+
               <button
                 onClick={() => router.push('/don-hang/tao-moi')}
-                className="flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                className="flex items-center justify-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 whitespace-nowrap flex-shrink-0"
               >
                 <PlusIcon className="w-5 h-5 mr-2" />
                 Tạo đơn hàng
@@ -257,8 +259,8 @@ export default function DonHangPage() {
           </div>
         </div>
 
-        {/* Orders Table */}
-        <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+        {/* Orders Table - Desktop */}
+        <div className="hidden lg:block bg-white rounded-lg shadow-sm overflow-hidden">
           {isLoading ? (
             <div className="flex items-center justify-center h-64">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
@@ -278,19 +280,10 @@ export default function DonHangPage() {
                       Ngày tạo
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Tổng tiền
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Giảm giá
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Thành tiền
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Phương thức
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Trạng thái thanh toán
+                      Trạng thái
                     </th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Thao tác
@@ -299,13 +292,6 @@ export default function DonHangPage() {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {filteredOrders.map((order: DonHang) => {
-                    console.log('🔍 Rendering order:', {
-                      maDonHang: order.maDonHang,
-                      trangThaiThanhToan: order.trangThaiThanhToan,
-                      ghiChu: order.ghiChu
-                    });
-
-                    // Find customer by maKhachHang to get tenThuongGoi
                     const customer = customers.find((c: any) => c.maKhachHang === order.maKhachHang);
 
                     return (
@@ -314,26 +300,13 @@ export default function DonHangPage() {
                         {customer?.tenThuongGoi || order.tenKhachHang}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">{order.tenKhachHang}</div>
-                        </div>
+                        <div className="text-sm font-medium text-gray-900">{order.tenKhachHang}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {new Date(order.ngayTao).toLocaleDateString('vi-VN')}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {formatCurrency(order.tongTien)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600">
-                        {order.giamGia && parseFloat(order.giamGia) > 0 
-                          ? `-${formatCurrency(order.giamGia)}` 
-                          : '-'}
-                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-primary-600">
                         {formatCurrency(order.thanhTien)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {order.phuongThucThanhToan}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
@@ -349,17 +322,10 @@ export default function DonHangPage() {
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button
                           onClick={() => viewOrderDetails(order)}
-                          className="text-primary-600 hover:text-primary-900 mr-3"
+                          className="text-primary-600 hover:text-primary-900"
                           title="Xem chi tiết"
                         >
                           <EyeIcon className="w-5 h-5" />
-                        </button>
-                        <button
-                          onClick={() => window.print()}
-                          className="text-gray-600 hover:text-gray-900"
-                          title="In đơn hàng"
-                        >
-                          <PrinterIcon className="w-5 h-5" />
                         </button>
                       </td>
                     </tr>
@@ -367,12 +333,77 @@ export default function DonHangPage() {
                   })}
                 </tbody>
               </table>
-              
+
               {filteredOrders.length === 0 && (
                 <div className="text-center py-12 text-gray-500">
                   Không tìm thấy đơn hàng nào
                 </div>
               )}
+            </div>
+          )}
+        </div>
+
+        {/* Orders List - Mobile */}
+        <div className="lg:hidden space-y-4">
+          {isLoading ? (
+            <div className="flex items-center justify-center h-64">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+            </div>
+          ) : filteredOrders.length > 0 ? (
+            filteredOrders.map((order: DonHang) => {
+              const customer = customers.find((c: any) => c.maKhachHang === order.maKhachHang);
+
+              return (
+                <div
+                  key={order.maDonHang}
+                  className="bg-white rounded-lg shadow-sm p-4"
+                  onClick={() => viewOrderDetails(order)}
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-gray-900">
+                        {customer?.tenThuongGoi || order.tenKhachHang}
+                      </h3>
+                      <p className="text-sm text-gray-600">{order.tenKhachHang}</p>
+                    </div>
+                    <span className={`px-2 py-1 text-xs font-semibold rounded-full whitespace-nowrap ${
+                      order.trangThaiThanhToan === 'Đã thanh toán'
+                        ? 'bg-green-100 text-green-800'
+                        : order.trangThaiThanhToan === 'Chưa thanh toán'
+                        ? 'bg-red-100 text-red-800'
+                        : 'bg-yellow-100 text-yellow-800'
+                    }`}>
+                      {order.trangThaiThanhToan}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Ngày tạo:</span>
+                      <span className="font-medium">{new Date(order.ngayTao).toLocaleDateString('vi-VN')}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Thành tiền:</span>
+                      <span className="font-semibold text-primary-600">{formatCurrency(order.thanhTien)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Phương thức:</span>
+                      <span className="font-medium">{order.phuongThucThanhToan}</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 pt-3 border-t flex justify-end">
+                    <button className="flex items-center text-sm text-primary-600 font-medium">
+                      <EyeIcon className="w-4 h-4 mr-1" />
+                      Xem chi tiết
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="bg-white rounded-lg shadow-sm p-12 text-center text-gray-500">
+              Không tìm thấy đơn hàng nào
             </div>
           )}
         </div>

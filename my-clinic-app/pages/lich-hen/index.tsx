@@ -261,26 +261,29 @@ export default function LichHenPage() {
       <div className="space-y-6">
         {/* Header */}
         <div className="bg-white rounded-lg shadow-sm p-4">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div className="flex flex-col gap-4">
+            {/* Title */}
             <div>
               <h2 className="text-lg font-semibold text-gray-900">Lịch hẹn khám</h2>
               <p className="text-sm text-gray-600">
-                {new Date().toLocaleDateString('vi-VN', { 
-                  weekday: 'long', 
-                  year: 'numeric', 
-                  month: 'long', 
-                  day: 'numeric' 
+                {new Date().toLocaleDateString('vi-VN', {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
                 })}
               </p>
             </div>
-            
-            <div className="flex items-center gap-4">
+
+            {/* Controls */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              {/* View Mode Selector */}
               <div className="flex bg-gray-100 rounded-lg p-1">
                 {['day', 'week', 'month'].map((mode) => (
                   <button
                     key={mode}
                     onClick={() => setViewMode(mode as any)}
-                    className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                    className={`flex-1 px-3 py-1 rounded text-sm font-medium transition-colors ${
                       viewMode === mode
                         ? 'bg-white text-primary-600 shadow-sm'
                         : 'text-gray-600 hover:text-gray-900'
@@ -291,27 +294,29 @@ export default function LichHenPage() {
                 ))}
               </div>
 
+              {/* Today Button */}
               <button
                 onClick={() => {
                   setSelectedDate(new Date());
                   setViewMode('day');
                 }}
-                className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors relative"
+                className="flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap"
               >
-                <CalendarDaysIcon className="w-5 h-5 mr-2" />
+                <CalendarDaysIcon className="w-5 h-5 mr-2 flex-shrink-0" />
                 Hôm nay
                 {todayAppointments.length > 0 && (
-                  <span className="ml-2 bg-white text-blue-600 text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                  <span className="ml-2 bg-white text-blue-600 text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center flex-shrink-0">
                     {todayAppointments.length}
                   </span>
                 )}
               </button>
 
+              {/* Add Appointment Button */}
               <button
                 onClick={() => setShowAppointmentForm(true)}
-                className="flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                className="flex items-center justify-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 whitespace-nowrap"
               >
-                <PlusIcon className="w-5 h-5 mr-2" />
+                <PlusIcon className="w-5 h-5 mr-2 flex-shrink-0" />
                 Thêm lịch hẹn
               </button>
             </div>
@@ -837,35 +842,55 @@ function AppointmentFormModal({ onClose, onSave }: any) {
         // Calculate commissions
         let employeeCommission = 0;
         let supervisorCommission = 0;
+        let employeeCommissionRate = 0;
+        let supervisorCommissionRate = 0;
 
-        // Calculate supervisor commission (20% of service price)
-        if (selectedSupervisor && servicePrice > 0) {
-          supervisorCommission = servicePrice * 0.20;
-          console.log('💰 Supervisor commission (20%):', supervisorCommission);
-        }
-
-        // Fetch and calculate employee commission based on configured rate
-        if (selectedStaff && primaryServiceCode && servicePrice > 0) {
+        // Fetch commission rates for both staff and supervisor
+        if (primaryServiceCode && servicePrice > 0) {
           try {
-            // Fetch commission configuration for this employee and service
+            // Fetch commission configuration for this service
             const commissionRes = await fetch(`/api/hoa-hong?maDichVu=${primaryServiceCode}`);
             if (commissionRes.ok) {
               const commissions = await commissionRes.json();
 
-              // Find the commission rate for the selected staff member
-              const staffCommission = commissions.find((c: any) =>
-                c.tenNhanVien === selectedStaff && c.maDichVu === primaryServiceCode
-              );
+              // Get employee commission rate
+              if (selectedStaff) {
+                const staffCommission = commissions.find((c: any) =>
+                  c.tenNhanVien === selectedStaff && c.maDichVu === primaryServiceCode
+                );
 
-              if (staffCommission) {
-                const commissionRate = parseFloat(staffCommission.tyLeHoaHong || '0');
-                employeeCommission = (servicePrice * commissionRate) / 100;
-                console.log('💰 Employee commission:', {
-                  rate: commissionRate,
-                  amount: employeeCommission
-                });
-              } else {
-                console.log('⚠️ No commission configuration found for this employee-service combination');
+                if (staffCommission) {
+                  employeeCommissionRate = parseFloat(staffCommission.tyLeHoaHong || '0');
+                  employeeCommission = (servicePrice * employeeCommissionRate) / 100;
+                  console.log('💰 Employee commission:', {
+                    rate: employeeCommissionRate,
+                    amount: employeeCommission
+                  });
+                } else {
+                  console.log('⚠️ No commission configuration found for employee');
+                }
+              }
+
+              // Get supervisor commission rate
+              if (selectedSupervisor) {
+                const supervisorCommissionConfig = commissions.find((c: any) =>
+                  c.tenNhanVien === selectedSupervisor && c.maDichVu === primaryServiceCode
+                );
+
+                if (supervisorCommissionConfig) {
+                  supervisorCommissionRate = parseFloat(supervisorCommissionConfig.tyLeHoaHong || '0');
+                  // Supervisor salary = (supervisor rate - employee rate) * service price / 100
+                  const rateDifference = supervisorCommissionRate - employeeCommissionRate;
+                  supervisorCommission = (servicePrice * rateDifference) / 100;
+                  console.log('💰 Supervisor commission:', {
+                    supervisorRate: supervisorCommissionRate,
+                    employeeRate: employeeCommissionRate,
+                    rateDifference: rateDifference,
+                    amount: supervisorCommission
+                  });
+                } else {
+                  console.log('⚠️ No commission configuration found for supervisor');
+                }
               }
             }
           } catch (error) {
@@ -1068,14 +1093,14 @@ function AppointmentFormModal({ onClose, onSave }: any) {
             {/* Supervisor Selection */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Người chính (Quản lý/Giám sát)
+                Người chỉnh (Quản lý/Giám sát)
               </label>
               <select
                 value={selectedSupervisor}
                 onChange={(e) => setSelectedSupervisor(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
               >
-                <option value="">Chọn người chính</option>
+                <option value="">Chọn người chỉnh</option>
                 {staff
                   .filter((s: NhanVien) =>
                     s.trangThai === 'Hoạt động' &&
@@ -1089,7 +1114,7 @@ function AppointmentFormModal({ onClose, onSave }: any) {
                 }
               </select>
               <p className="text-xs text-gray-500 mt-1">
-                Để tính lương quản lý dựa trên chênh lệch hoa hồng
+                Lương quản lý = (% người chỉnh - % nhân viên) × giá dịch vụ
               </p>
             </div>
 
@@ -1314,41 +1339,33 @@ function AppointmentDetailsModal({ appointment, onClose }: any) {
     },
   });
 
-  // Parse existing additional services from treatmentId
+  // Load existing additional services from Chi tiết dịch vụ thêm sheet
   useEffect(() => {
-    // Fetch the session data to get dichVuThem and nhanVienThucHienDVThem
-    const fetchSessionData = async () => {
-      if (!appointment.treatmentId) return;
+    const fetchAdditionalServices = async () => {
+      if (!appointment.id) return;
 
       try {
-        const res = await fetch(`/api/luot-tri-lieu?maLuot=${appointment.id}`);
+        const res = await fetch(`/api/chi-tiet-dich-vu-them?maLuot=${appointment.id}`);
         if (!res.ok) return;
 
-        const sessions = await res.json();
-        const session = sessions.find((s: any) => s.maLuot === appointment.id);
+        const details = await res.json();
 
-        if (session && session.dichVuThem && session.nhanVienThucHienDVThem) {
-          // Parse comma-separated lists
-          const servicesList = session.dichVuThem.split(',').map((s: string) => s.trim());
-          const staffList = session.nhanVienThucHienDVThem.split(',').map((s: string) => s.trim());
+        if (Array.isArray(details) && details.length > 0) {
+          // Convert detail records to the format used by the UI
+          const parsed = details.map((detail: any) => ({
+            service: detail.tenDichVu,
+            staff: detail.tenNhanVien
+          }));
 
-          // Combine into array of objects
-          const parsed = servicesList.map((service: string, index: number) => ({
-            service,
-            staff: staffList[index] || staffList[0] || ''
-          })).filter((item: any) => item.service && item.staff);
-
-          if (parsed.length > 0) {
-            setAdditionalServices(parsed);
-          }
+          setAdditionalServices(parsed);
         }
       } catch (error) {
-        console.error('Error fetching session data:', error);
+        console.error('Error fetching additional service details:', error);
       }
     };
 
-    fetchSessionData();
-  }, [appointment.id, appointment.treatmentId]);
+    fetchAdditionalServices();
+  }, [appointment.id]);
 
   // Parse available services from treatment plan
   const getAvailableServices = (): string[] => {
@@ -1414,68 +1431,102 @@ function AppointmentDetailsModal({ appointment, onClose }: any) {
       .join(', ');
   };
 
-  // Save additional services to dedicated columns
+  // Save additional services to dedicated sheet (Chi tiết dịch vụ thêm)
   const handleSaveAdditionalServices = async () => {
     setIsUpdating(true);
     try {
-      // Format additional services as comma-separated lists
-      const dichVuThem = additionalServices.map(item => item.service).join(', ');
-      const nhanVienThucHienDVThem = additionalServices.map(item => item.staff).join(', ');
+      // First, delete existing additional service details for this session
+      const existingDetailsRes = await fetch(`/api/chi-tiet-dich-vu-them?maLuot=${appointment.id}`);
+      if (existingDetailsRes.ok) {
+        const existingDetails = await existingDetailsRes.json();
 
-      // Calculate commission for each additional service
-      const commissionsPromises = additionalServices.map(async (item) => {
+        // Delete each existing detail
+        for (const detail of existingDetails) {
+          await fetch(`/api/chi-tiet-dich-vu-them?maChiTiet=${detail.maChiTiet}`, {
+            method: 'DELETE',
+          });
+        }
+      }
+
+      // Fetch all services and staff data once
+      const servicesRes = await fetch('/api/dich-vu');
+      if (!servicesRes.ok) throw new Error('Failed to fetch services');
+      const servicesData = await servicesRes.json();
+
+      const staffRes = await fetch('/api/nhan-vien');
+      if (!staffRes.ok) throw new Error('Failed to fetch staff');
+      const staffData = await staffRes.json();
+
+      // Save each additional service as a separate record
+      for (const item of additionalServices) {
         try {
-          // Fetch service data
-          const servicesRes = await fetch('/api/dich-vu');
-          if (!servicesRes.ok) return '0';
-          const servicesData = await servicesRes.json();
-
+          // Find service details
           const service = servicesData.find((s: DichVu) => s.tenDichVu === item.service);
-          if (!service) return '0';
+          if (!service) {
+            console.warn(`Service not found: ${item.service}`);
+            continue;
+          }
+
+          // Find staff details
+          const staffMember = staffData.find((s: NhanVien) => s.hoVaTen === item.staff);
+          if (!staffMember) {
+            console.warn(`Staff not found: ${item.staff}`);
+            continue;
+          }
 
           const servicePrice = parseFloat(service.giaDichVu || '0');
-          if (servicePrice === 0) return '0';
 
           // Fetch commission rate for this staff and service
-          const commissionRes = await fetch(`/api/hoa-hong?maDichVu=${service.maDichVu}`);
-          if (!commissionRes.ok) return '0';
-          const commissions = await commissionRes.json();
+          let commissionRate = 0;
+          let commission = 0;
 
-          const staffCommission = commissions.find((c: any) =>
-            c.tenNhanVien === item.staff && c.maDichVu === service.maDichVu
-          );
+          try {
+            const commissionRes = await fetch(`/api/hoa-hong?maDichVu=${service.maDichVu}`);
+            if (commissionRes.ok) {
+              const commissions = await commissionRes.json();
+              const staffCommission = commissions.find((c: any) =>
+                c.tenNhanVien === item.staff && c.maDichVu === service.maDichVu
+              );
 
-          if (!staffCommission) return '0';
+              if (staffCommission) {
+                commissionRate = parseFloat(staffCommission.tyLeHoaHong || '0');
+                commission = (servicePrice * commissionRate) / 100;
+              }
+            }
+          } catch (error) {
+            console.warn('Error fetching commission:', error);
+          }
 
-          const commissionRate = parseFloat(staffCommission.tyLeHoaHong || '0');
-          const commission = (servicePrice * commissionRate) / 100;
+          // Create detail record
+          const detailData = {
+            maLuot: appointment.id,
+            maDichVu: service.maDichVu,
+            tenDichVu: service.tenDichVu,
+            maNhanVien: staffMember.maNhanVien,
+            tenNhanVien: staffMember.hoVaTen,
+            giaDichVu: servicePrice.toString(),
+            tyLeHoaHong: commissionRate.toString(),
+            hoaHong: commission.toFixed(0),
+            ngayThucHien: appointment.date,
+            ghiChu: '',
+          };
 
-          return commission.toFixed(0);
+          const response = await fetch('/api/chi-tiet-dich-vu-them', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(detailData),
+          });
+
+          if (!response.ok) {
+            console.error(`Failed to save detail for ${item.service}`);
+          }
         } catch (error) {
-          console.error('Error calculating commission for service:', item.service, error);
-          return '0';
+          console.error(`Error saving service ${item.service}:`, error);
         }
-      });
-
-      const commissionsArray = await Promise.all(commissionsPromises);
-      const hoaHongDichVuThem = commissionsArray.join(', ');
-
-      const response = await fetch('/api/luot-tri-lieu', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          maLuot: appointment.id,
-          dichVuThem: dichVuThem,
-          nhanVienThucHienDVThem: nhanVienThucHienDVThem,
-          hoaHongDichVuThem: hoaHongDichVuThem,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update additional services');
       }
 
       queryClient.invalidateQueries({ queryKey: ['treatment-sessions'] });
+      queryClient.invalidateQueries({ queryKey: ['additional-service-details'] });
       toast.success('Đã lưu dịch vụ thêm!');
     } catch (error) {
       console.error('Error saving additional services:', error);
@@ -1494,6 +1545,99 @@ function AppointmentDetailsModal({ appointment, onClose }: any) {
     setIsCompleting(true);
 
     try {
+      // First, save additional services if any
+      if (additionalServices.length > 0) {
+        // Delete existing additional service details for this session
+        const existingDetailsRes = await fetch(`/api/chi-tiet-dich-vu-them?maLuot=${appointment.id}`);
+        if (existingDetailsRes.ok) {
+          const existingDetails = await existingDetailsRes.json();
+
+          // Delete each existing detail
+          for (const detail of existingDetails) {
+            await fetch(`/api/chi-tiet-dich-vu-them?maChiTiet=${detail.maChiTiet}`, {
+              method: 'DELETE',
+            });
+          }
+        }
+
+        // Fetch all services and staff data once
+        const servicesRes = await fetch('/api/dich-vu');
+        if (!servicesRes.ok) throw new Error('Failed to fetch services');
+        const servicesData = await servicesRes.json();
+
+        const staffRes = await fetch('/api/nhan-vien');
+        if (!staffRes.ok) throw new Error('Failed to fetch staff');
+        const staffData = await staffRes.json();
+
+        // Save each additional service as a separate record
+        for (const item of additionalServices) {
+          try {
+            // Find service details
+            const service = servicesData.find((s: DichVu) => s.tenDichVu === item.service);
+            if (!service) {
+              console.warn(`Service not found: ${item.service}`);
+              continue;
+            }
+
+            // Find staff details
+            const staffMember = staffData.find((s: NhanVien) => s.hoVaTen === item.staff);
+            if (!staffMember) {
+              console.warn(`Staff not found: ${item.staff}`);
+              continue;
+            }
+
+            const servicePrice = parseFloat(service.giaDichVu || '0');
+
+            // Fetch commission rate for this staff and service
+            let commissionRate = 0;
+            let commission = 0;
+
+            try {
+              const commissionRes = await fetch(`/api/hoa-hong?maDichVu=${service.maDichVu}`);
+              if (commissionRes.ok) {
+                const commissions = await commissionRes.json();
+                const staffCommission = commissions.find((c: any) =>
+                  c.tenNhanVien === item.staff && c.maDichVu === service.maDichVu
+                );
+
+                if (staffCommission) {
+                  commissionRate = parseFloat(staffCommission.tyLeHoaHong || '0');
+                  commission = (servicePrice * commissionRate) / 100;
+                }
+              }
+            } catch (error) {
+              console.warn('Error fetching commission:', error);
+            }
+
+            // Create detail record
+            const detailData = {
+              maLuot: appointment.id,
+              maDichVu: service.maDichVu,
+              tenDichVu: service.tenDichVu,
+              maNhanVien: staffMember.maNhanVien,
+              tenNhanVien: staffMember.hoVaTen,
+              giaDichVu: servicePrice.toString(),
+              tyLeHoaHong: commissionRate.toString(),
+              hoaHong: commission.toFixed(0),
+              ngayThucHien: appointment.date,
+              ghiChu: '',
+            };
+
+            const response = await fetch('/api/chi-tiet-dich-vu-them', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(detailData),
+            });
+
+            if (!response.ok) {
+              console.error(`Failed to save detail for ${item.service}`);
+            }
+          } catch (error) {
+            console.error(`Error saving service ${item.service}:`, error);
+          }
+        }
+      }
+
       // Update the treatment session status to completed
       const response = await fetch(`/api/luot-tri-lieu/${appointment.id}`, {
         method: 'PUT',
@@ -1509,6 +1653,7 @@ function AppointmentDetailsModal({ appointment, onClose }: any) {
 
       // Invalidate and refetch treatment sessions data
       queryClient.invalidateQueries({ queryKey: ['treatment-sessions'] });
+      queryClient.invalidateQueries({ queryKey: ['additional-service-details'] });
 
       toast.success('Đã hoàn thành buổi điều trị!');
       onClose();
@@ -1628,21 +1773,13 @@ function AppointmentDetailsModal({ appointment, onClose }: any) {
                       </button>
                     </div>
                   ))}
-
-                  <button
-                    onClick={handleSaveAdditionalServices}
-                    disabled={isUpdating}
-                    className="w-full px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 text-sm"
-                  >
-                    {isUpdating ? 'Đang lưu...' : 'Lưu dịch vụ thêm'}
-                  </button>
                 </div>
               ) : (
                 <p className="text-sm text-gray-500 italic">Chưa có dịch vụ thêm nào được chọn</p>
               )}
 
               <p className="text-xs text-gray-500 mt-3">
-                💡 Dịch vụ thêm sẽ được lưu vào các cột riêng để tính lương và hoa hồng
+                💡 Dịch vụ thêm sẽ được tự động lưu khi bạn nhấn nút "Hoàn thành"
               </p>
             </div>
           )}

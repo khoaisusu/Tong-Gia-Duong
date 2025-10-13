@@ -186,6 +186,49 @@ export default function CustomerForm({ customer, onClose, onSave, isLoading }: C
                 />
               </div>
 
+              {/* Medical Treatment Fields */}
+              <div className="border-t pt-4">
+                <h4 className="text-sm font-semibold text-gray-900 mb-3">Thông tin điều trị</h4>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Chẩn đoán
+                    </label>
+                    <textarea
+                      {...register('chanDoan')}
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
+                      placeholder="Kết quả chẩn đoán, tình trạng da, vùng cần điều trị..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Điều trị
+                    </label>
+                    <textarea
+                      {...register('dieuTri')}
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
+                      placeholder="Phương pháp điều trị, liệu trình, sản phẩm sử dụng..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Kết quả
+                    </label>
+                    <textarea
+                      {...register('ketQua')}
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
+                      placeholder="Kết quả sau điều trị, cải thiện, ghi nhận..."
+                    />
+                  </div>
+                </div>
+              </div>
+
               {/* Additional Info */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>

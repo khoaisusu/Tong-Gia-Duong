@@ -29,9 +29,6 @@ interface LuotTriLieu {
   nguoiChinh: string;
   hoaHongNhanVien: string;
   luongQuanLy: string;
-  dichVuThem: string;
-  nhanVienThucHienDVThem: string;
-  hoaHongDichVuThem: string;
   ngayThucHien: string;
   trangThai: string;
 }
@@ -79,6 +76,16 @@ export default function SalaryDetailPage() {
     },
   });
 
+  // Fetch additional service details
+  const { data: additionalServiceDetails = [] } = useQuery({
+    queryKey: ['additional-service-details'],
+    queryFn: async () => {
+      const res = await fetch('/api/chi-tiet-dich-vu-them');
+      if (!res.ok) throw new Error('Failed to fetch additional service details');
+      return res.json();
+    },
+  });
+
   // Calculate salary details for each employee
   const salaryDetails: SalaryDetail[] = useMemo(() => {
     if (!employees.length || !treatmentSessions.length) return [];
@@ -115,40 +122,23 @@ export default function SalaryDetailPage() {
             return sum + commission;
           }, 0);
 
-        // Calculate commission from additional services
-        // Only calculate if the columns exist in Google Sheet (nhanVienThucHienDVThem and hoaHongDichVuThem)
-        const hoaHongDichVuThem = treatmentSessions
-          .filter((session: LuotTriLieu) => {
-            // Skip if the additional service columns don't exist yet
-            if (!session.nhanVienThucHienDVThem || !session.hoaHongDichVuThem) return false;
-            if (!session.ngayThucHien) return false;
+        // Calculate commission from additional services (from Chi tiết dịch vụ thêm sheet)
+        const hoaHongDichVuThem = additionalServiceDetails
+          .filter((detail: any) => {
+            // Filter by employee name
+            if (detail.tenNhanVien !== employee.hoVaTen) return false;
 
-            const sessionDate = new Date(session.ngayThucHien);
-            const sessionMonth = sessionDate.getMonth() + 1;
-            const sessionYear = sessionDate.getFullYear();
+            // Filter by month/year
+            if (!detail.ngayThucHien) return false;
+            const detailDate = new Date(detail.ngayThucHien);
+            const detailMonth = detailDate.getMonth() + 1;
+            const detailYear = detailDate.getFullYear();
 
-            // Check if session is in selected month/year and completed
-            if (sessionMonth !== selectedMonth || sessionYear !== selectedYear || session.trangThai !== 'Hoàn thành') {
-              return false;
-            }
-
-            // Parse staff list and commission list
-            const staffList = session.nhanVienThucHienDVThem.split(',').map(s => s.trim());
-            return staffList.includes(employee.hoVaTen);
+            return detailMonth === selectedMonth && detailYear === selectedYear;
           })
-          .reduce((sum: number, session: LuotTriLieu) => {
-            // Parse staff list and commission list
-            const staffList = session.nhanVienThucHienDVThem.split(',').map(s => s.trim());
-            const commissionList = session.hoaHongDichVuThem.split(',').map(s => s.trim());
-
-            // Find index of this employee in the staff list
-            const staffIndex = staffList.indexOf(employee.hoVaTen);
-            if (staffIndex !== -1 && staffIndex < commissionList.length) {
-              const commission = parseFloat(commissionList[staffIndex] || '0');
-              return sum + commission;
-            }
-
-            return sum;
+          .reduce((sum: number, detail: any) => {
+            const commission = parseFloat(detail.hoaHong || '0');
+            return sum + commission;
           }, 0);
 
         // Calculate total supervisor salary
@@ -182,7 +172,7 @@ export default function SalaryDetailPage() {
         };
       })
       .sort((a: SalaryDetail, b: SalaryDetail) => b.tongLuong - a.tongLuong); // Sort by total salary descending
-  }, [employees, treatmentSessions, selectedMonth, selectedYear]);
+  }, [employees, treatmentSessions, additionalServiceDetails, selectedMonth, selectedYear]);
 
   // Calculate summary statistics
   const summary = useMemo(() => {
@@ -484,7 +474,8 @@ export default function SalaryDetailPage() {
           <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
             <li>Lương cơ bản và phụ cấp được lấy từ thông tin nhân viên</li>
             <li>Hoa hồng được tính từ các lượt trị liệu đã hoàn thành trong tháng</li>
-            <li><strong>HH DV thêm</strong>: Hoa hồng từ các dịch vụ thêm mà nhân viên thực hiện (châm cứu, thủy châm, ...)</li>
+            <li><strong>HH DV thêm</strong>: Hoa hồng từ các dịch vụ thêm (châm cứu, thủy châm, ...) được lưu riêng trong sheet &quot;Chi tiết dịch vụ thêm&quot;</li>
+            <li>Mỗi dịch vụ thêm được lưu thành 1 dòng riêng để dễ dàng tính toán và báo cáo</li>
             <li>Lương quản lý (20%) được tính cho nhân viên làm &quot;Người chính&quot; giám sát</li>
             <li>Chỉ tính lương cho các buổi điều trị đã hoàn thành</li>
             <li>Số buổi là tổng số lượt trị liệu mà nhân viên thực hiện</li>
