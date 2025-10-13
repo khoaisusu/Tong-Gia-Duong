@@ -1,12 +1,13 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../auth/[...nextauth]';
-import { 
-  getAllRows, 
+import {
+  getAllRows,
   appendRow,
-  SHEETS 
+  SHEETS
 } from '../../../utils/googleSheets';
 import { mappingKhachHang, KhachHang } from '../../../utils/columnMapping';
+import { validateRequest, CustomerSchema } from '../../../utils/inputValidation';
 
 export default async function handler(
   req: NextApiRequest,
@@ -26,40 +27,52 @@ export default async function handler(
         return res.status(200).json(customers);
 
       case 'POST':
-        // Create new customer
+        // Create new customer with comprehensive validation
         const newCustomer = req.body as Partial<KhachHang>;
-        
-        // Validate required fields
-        if (!newCustomer.hoVaTen || !newCustomer.soDienThoai) {
-          return res.status(400).json({ 
-            error: 'Họ tên và số điện thoại là bắt buộc' 
+
+        // ✅ Step 1: Validate and sanitize input
+        const validation = validateRequest(newCustomer, CustomerSchema);
+        if (!validation.valid) {
+          console.warn('❌ Customer validation failed:', validation.errors);
+          return res.status(400).json({
+            error: 'Dữ liệu không hợp lệ',
+            details: validation.errors
           });
         }
 
-        // Check if phone number already exists
+        // Use sanitized data to prevent XSS
+        const sanitizedCustomer = validation.data!;
+
+        // ✅ Step 2: Check if phone number already exists
         const existingCustomers = await getAllRows(SHEETS.KHACH_HANG, mappingKhachHang);
         const phoneExists = existingCustomers.some(
-          (c: KhachHang) => c.soDienThoai === newCustomer.soDienThoai
+          (c: KhachHang) => c.soDienThoai === sanitizedCustomer.soDienThoai
         );
-        
+
         if (phoneExists) {
-          return res.status(400).json({ 
-            error: 'Số điện thoại đã tồn tại trong hệ thống' 
+          return res.status(400).json({
+            error: 'Số điện thoại đã tồn tại trong hệ thống'
           });
         }
 
-        // Add metadata
+        // ✅ Step 3: Add metadata
         const customerData = {
-          ...newCustomer,
+          ...sanitizedCustomer,
           ngayTao: new Date().toISOString().split('T')[0],
-          trangThai: newCustomer.trangThai || 'Mới',
+          trangThai: sanitizedCustomer.trangThai || 'Mới',
         };
 
+        console.log('✅ Creating customer with validated data:', {
+          hoVaTen: customerData.hoVaTen,
+          soDienThoai: customerData.soDienThoai,
+          email: customerData.email || 'N/A'
+        });
+
         await appendRow(SHEETS.KHACH_HANG, mappingKhachHang, customerData);
-        
-        return res.status(201).json({ 
+
+        return res.status(201).json({
           message: 'Thêm khách hàng thành công',
-          data: customerData 
+          data: customerData
         });
 
       default:

@@ -12,6 +12,8 @@ import {
 import { mappingDonHang, mappingGiaoDich, DonHang, GiaoDich } from '../../utils/columnMapping';
 import { getCompletedTransactionMap, updatePaymentStatusBasedOnTransactions } from '../../utils/paymentStatusSync';
 import { updateInventoryAfterSale, parseProductsFromOrder } from '../../utils/inventoryManager';
+import { validateRequest, OrderSchema } from '../../utils/inputValidation';
+import { withTransaction } from '../../utils/transactionManager';
 
 export default async function handler(
   req: NextApiRequest,
@@ -50,66 +52,91 @@ export default async function handler(
         return res.status(200).json(ordersWithStatus);
 
       case 'POST':
-        // Create new order
+        // Create new order with validation and transaction safety
         const newOrder = req.body as Partial<DonHang>;
-        
-        // Validate required fields
-        if (!newOrder.maKhachHang || !newOrder.danhSachSanPham) {
-          return res.status(400).json({ 
-            error: 'Thông tin khách hàng và sản phẩm là bắt buộc' 
+
+        // ✅ Step 1: Validate and sanitize input
+        const orderValidation = validateRequest(newOrder, OrderSchema);
+        if (!orderValidation.valid) {
+          console.warn('❌ Order validation failed:', orderValidation.errors);
+          return res.status(400).json({
+            error: 'Dữ liệu đơn hàng không hợp lệ',
+            details: orderValidation.errors
           });
         }
 
-        // Generate order ID if not provided
+        const sanitizedOrder = orderValidation.data!;
+
+        // ✅ Step 2: Generate order ID if not provided
         const orderData = {
-          ...newOrder,
-          maDonHang: newOrder.maDonHang || await generateSequentialId('DH', SHEETS.DON_HANG, mappingDonHang, 'maDonHang'),
-          ngayTao: newOrder.ngayTao || new Date().toISOString().split('T')[0],
+          ...sanitizedOrder,
+          maDonHang: sanitizedOrder.maDonHang || await generateSequentialId('DH', SHEETS.DON_HANG, mappingDonHang, 'maDonHang'),
+          ngayTao: sanitizedOrder.ngayTao || new Date().toISOString().split('T')[0],
           nhanVienTao: session.user?.name || session.user?.email || '',
-          trangThaiThanhToan: newOrder.trangThaiThanhToan || 'Chưa thanh toán',
+          trangThaiThanhToan: sanitizedOrder.trangThaiThanhToan || 'Chưa thanh toán',
         };
 
-        // Create order
-        await appendRow(SHEETS.DON_HANG, mappingDonHang, orderData);
-        
-        // Create transaction record and update inventory if payment is completed
-        if (orderData.trangThaiThanhToan === 'Đã thanh toán') {
-          const transaction: Partial<GiaoDich> = {
-            maGiaoDich: generateId('GD'),
-            loaiGiaoDich: 'Thu',
-            maThamChieu: orderData.maDonHang,
-            maKhachHang: orderData.maKhachHang,
-            tenKhachHang: orderData.tenKhachHang,
-            soTien: orderData.thanhTien,
-            phuongThuc: orderData.phuongThucThanhToan,
-            ngayGiaoDich: orderData.ngayTao,
-            noiDung: `Thanh toán đơn hàng ${orderData.maDonHang}`,
-            trangThai: 'Hoàn thành',
-            nhanVienXuLy: orderData.nhanVienTao,
-          };
+        // ✅ Step 3: Use transaction for atomic order creation
+        try {
+          await withTransaction(async (tx) => {
+            // Create order
+            await tx.create(SHEETS.DON_HANG, mappingDonHang, orderData);
 
-          await appendRow(SHEETS.GIAO_DICH, mappingGiaoDich, transaction);
+            // Create transaction record if payment is completed
+            if (orderData.trangThaiThanhToan === 'Đã thanh toán') {
+              const transaction: Partial<GiaoDich> = {
+                maGiaoDich: generateId('GD'),
+                loaiGiaoDich: 'Thu',
+                maThamChieu: orderData.maDonHang,
+                maKhachHang: orderData.maKhachHang,
+                tenKhachHang: orderData.tenKhachHang,
+                soTien: orderData.thanhTien,
+                phuongThuc: orderData.phuongThucThanhToan,
+                ngayGiaoDich: orderData.ngayTao,
+                noiDung: `Thanh toán đơn hàng ${orderData.maDonHang}`,
+                trangThai: 'Hoàn thành',
+                nhanVienXuLy: orderData.nhanVienTao,
+              };
 
-          // Update inventory for sold products
-          const soldProducts = parseProductsFromOrder(orderData.danhSachSanPham || '[]');
-          if (soldProducts.length > 0) {
-            console.log('📦 Updating inventory for', soldProducts.length, 'products');
-            const inventoryResult = await updateInventoryAfterSale(soldProducts);
+              await tx.create(SHEETS.GIAO_DICH, mappingGiaoDich, transaction);
 
-            if (!inventoryResult.success && inventoryResult.errors.length > 0) {
-              console.log('⚠️ Inventory update had errors:', inventoryResult.errors);
-              // Note: We don't fail the order creation, just log the errors
-              // The order is still created but inventory might not be perfectly accurate
-            } else {
+              console.log('✅ Order and transaction created in atomic transaction');
+            }
+          });
+
+          // ✅ Step 4: Update inventory (outside transaction - can be retried separately)
+          if (orderData.trangThaiThanhToan === 'Đã thanh toán') {
+            const soldProducts = parseProductsFromOrder(orderData.danhSachSanPham || '[]');
+            if (soldProducts.length > 0) {
+              console.log('📦 Updating inventory for', soldProducts.length, 'products');
+              const inventoryResult = await updateInventoryAfterSale(soldProducts);
+
+              if (!inventoryResult.success && inventoryResult.errors.length > 0) {
+                console.warn('⚠️ Inventory update had errors:', inventoryResult.errors);
+                // Order and transaction are created, but inventory might need manual correction
+                return res.status(201).json({
+                  message: 'Tạo đơn hàng thành công',
+                  warning: 'Có lỗi khi cập nhật kho hàng',
+                  data: orderData,
+                  inventoryErrors: inventoryResult.errors
+                });
+              }
+
               console.log('✅ Inventory updated successfully for order:', orderData.maDonHang);
             }
           }
+
+          return res.status(201).json({
+            message: 'Tạo đơn hàng thành công',
+            data: orderData
+          });
+        } catch (error) {
+          console.error('❌ Order creation failed, transaction rolled back:', error);
+          return res.status(500).json({
+            error: 'Không thể tạo đơn hàng',
+            details: error instanceof Error ? error.message : 'Unknown error'
+          });
         }
-        
-        return res.status(201).json({ 
-          message: 'Tạo đơn hàng thành công',
-          data: orderData 
-        });
 
       case 'PUT':
         // Update order
