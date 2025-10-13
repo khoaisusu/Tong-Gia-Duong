@@ -1779,7 +1779,7 @@ function AppointmentDetailsModal({ appointment, onClose }: any) {
               )}
 
               <p className="text-xs text-gray-500 mt-3">
-                💡 Dịch vụ thêm sẽ được tự động lưu khi bạn nhấn nút "Hoàn thành"
+                💡 Dịch vụ thêm sẽ được tự động lưu khi bạn nhấn nút &quot;Hoàn thành&quot;
               </p>
             </div>
           )}
