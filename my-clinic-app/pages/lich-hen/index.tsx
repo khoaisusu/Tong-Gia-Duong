@@ -14,6 +14,7 @@ import {
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import { KhachHang, DichVu, NhanVien, LuotTriLieu, LieuTrinh } from '../../utils/columnMapping';
+import { calculateSupervisorCommission, calculateEmployeeCommission } from '../../utils/commissionCalculator';
 
 interface Appointment {
   id: string;
@@ -839,7 +840,7 @@ function AppointmentFormModal({ onClose, onSave }: any) {
           servicePrice: servicePrice
         });
 
-        // Calculate commissions
+        // Calculate commissions using centralized validation functions
         let employeeCommission = 0;
         let supervisorCommission = 0;
         let employeeCommissionRate = 0;
@@ -861,7 +862,8 @@ function AppointmentFormModal({ onClose, onSave }: any) {
 
                 if (staffCommission) {
                   employeeCommissionRate = parseFloat(staffCommission.tyLeHoaHong || '0');
-                  employeeCommission = (servicePrice * employeeCommissionRate) / 100;
+                  // ✅ Use validated calculation function
+                  employeeCommission = calculateEmployeeCommission(servicePrice, employeeCommissionRate);
                   console.log('💰 Employee commission:', {
                     rate: employeeCommissionRate,
                     amount: employeeCommission
@@ -879,13 +881,15 @@ function AppointmentFormModal({ onClose, onSave }: any) {
 
                 if (supervisorCommissionConfig) {
                   supervisorCommissionRate = parseFloat(supervisorCommissionConfig.tyLeHoaHong || '0');
-                  // Supervisor salary = (supervisor rate - employee rate) * service price / 100
-                  const rateDifference = supervisorCommissionRate - employeeCommissionRate;
-                  supervisorCommission = (servicePrice * rateDifference) / 100;
+                  // ✅ Use validated calculation function (prevents negative commissions)
+                  supervisorCommission = calculateSupervisorCommission(
+                    servicePrice,
+                    employeeCommissionRate,
+                    supervisorCommissionRate
+                  );
                   console.log('💰 Supervisor commission:', {
                     supervisorRate: supervisorCommissionRate,
                     employeeRate: employeeCommissionRate,
-                    rateDifference: rateDifference,
                     amount: supervisorCommission
                   });
                 } else {
