@@ -238,6 +238,33 @@ Kiểm tra Google Sheets:
 - Mở spreadsheet trực tiếp
 - Xem dữ liệu được ghi
 
+## 🔒 Bảo mật
+
+### Quan trọng - KHÔNG BAO GIỜ:
+- ❌ Commit file `.env.local` lên Git
+- ❌ Share credentials qua email/chat
+- ❌ Để public Google Sheets
+- ❌ Push private keys lên repository
+
+### Checklist bảo mật:
+- ✅ File `.env.local` đã có trong `.gitignore`
+- ✅ Google Sheets chỉ share với Service Account
+- ✅ OAuth redirect URIs chỉ có domain chính thức
+- ✅ Định kỳ rotate credentials (3-6 tháng)
+- ✅ Review access logs trên Google Cloud Console
+
+### Nếu credentials bị lộ:
+1. 🚨 **NGAY LẬP TỨC** revoke credentials cũ
+2. Generate credentials mới
+3. Update `.env.local` và Vercel environment variables
+4. Xóa credentials khỏi Git history nếu đã commit:
+   ```bash
+   git filter-branch --force --index-filter \
+     "git rm --cached --ignore-unmatch .env.local" \
+     --prune-empty --tag-name-filter cat -- --all
+   ```
+5. Force push (cẩn thận!): `git push origin --force --all`
+
 ## 📞 Hỗ trợ
 
 Nếu gặp vấn đề, vui lòng:
