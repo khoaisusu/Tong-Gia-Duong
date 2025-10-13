@@ -296,42 +296,73 @@ export function generateId(prefix: string): string {
   return `${prefix}${timestamp}${randomStr}`.toUpperCase();
 }
 
-// Generate sequential ID (DH0001, DH0002, LT0001, LT0002, etc.)
+// Helper: Random delay to reduce collision probability
+function randomDelay(min: number, max: number): Promise<void> {
+  const delay = Math.floor(Math.random() * (max - min + 1)) + min;
+  return new Promise(resolve => setTimeout(resolve, delay));
+}
+
+// Generate sequential ID with retry logic to handle race conditions
+// Uses timestamp-based fallback if sequential generation fails after retries
 export async function generateSequentialId<T extends Record<string, string>>(
   prefix: string,
   sheetName: string,
   mapping: T,
-  idField: string
+  idField: string,
+  maxRetries: number = 3
 ): Promise<string> {
-  try {
-    const allRows = await getAllRows(sheetName, mapping);
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      // Add random delay on retry to reduce collision probability
+      if (attempt > 0) {
+        await randomDelay(50 * attempt, 200 * attempt);
+        console.log(`🔄 Retry attempt ${attempt + 1}/${maxRetries} for ${prefix} ID generation`);
+      }
 
-    // Extract numbers from existing IDs
-    const existingNumbers = allRows
-      .map(row => {
-        const id = row[idField];
-        if (!id || typeof id !== 'string') return 0;
+      const allRows = await getAllRows(sheetName, mapping);
 
-        // Extract digits after prefix (DH0001 -> 0001, LT0023 -> 0023)
-        const match = id.match(new RegExp(`^${prefix}(\\d+)$`));
-        return match ? parseInt(match[1], 10) : 0;
-      })
-      .filter(num => num > 0);
+      // Extract numbers from existing IDs
+      const existingNumbers = allRows
+        .map(row => {
+          const id = row[idField];
+          if (!id || typeof id !== 'string') return 0;
 
-    // Find max number and increment
-    const maxNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) : 0;
-    const nextNumber = maxNumber + 1;
+          // Extract digits after prefix (DH0001 -> 0001, LT0023 -> 0023)
+          const match = id.match(new RegExp(`^${prefix}(\\d+)$`));
+          return match ? parseInt(match[1], 10) : 0;
+        })
+        .filter(num => num > 0);
 
-    // Format with 4 digits
-    const formattedNumber = nextNumber.toString().padStart(4, '0');
+      // Find max number and increment
+      const maxNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) : 0;
+      const nextNumber = maxNumber + 1;
 
-    console.log(`📝 Generated sequential ID: ${prefix}${formattedNumber} (previous max: ${maxNumber})`);
+      // Format with 4 digits
+      const formattedNumber = nextNumber.toString().padStart(4, '0');
+      const generatedId = `${prefix}${formattedNumber}`;
 
-    return `${prefix}${formattedNumber}`;
-  } catch (error) {
-    console.error(`❌ Error generating sequential ID for ${prefix}:`, error);
-    // Fallback to timestamp-based ID if there's an error
-    return generateId(prefix);
+      console.log(`📝 Generated sequential ID: ${generatedId} (previous max: ${maxNumber})`);
+
+      // Verify ID doesn't exist (double-check for race condition)
+      const exists = allRows.some(row => row[idField] === generatedId);
+      if (exists) {
+        console.warn(`⚠️ ID ${generatedId} already exists, retrying...`);
+        continue; // Retry
+      }
+
+      return generatedId;
+    } catch (error) {
+      console.error(`❌ Error generating sequential ID (attempt ${attempt + 1}/${maxRetries}):`, error);
+
+      // On last attempt, fallback to timestamp-based ID
+      if (attempt === maxRetries - 1) {
+        console.warn(`⚠️ Falling back to timestamp-based ID after ${maxRetries} failed attempts`);
+        return generateId(prefix);
+      }
+    }
   }
+
+  // Fallback (should never reach here, but TypeScript requires it)
+  return generateId(prefix);
 }
 

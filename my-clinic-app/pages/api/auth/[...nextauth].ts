@@ -36,12 +36,14 @@ export const authOptions: NextAuthOptions = {
 
       // Kiểm tra email có trong danh sách nhân viên không
       try {
-        // Check if required Google Sheets environment variables are set
+        // CRITICAL: Check if required Google Sheets environment variables are set
+        // If not configured, DENY access instead of allowing (fail secure)
         if (!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL ||
             !process.env.GOOGLE_PRIVATE_KEY ||
             !process.env.GOOGLE_SHEET_ID) {
-          console.error('❌ Google Sheets environment variables missing for staff check');
-          return true;
+          console.error('🚨 SECURITY: Google Sheets environment variables missing - denying access');
+          console.error('Configure GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY, and GOOGLE_SHEET_ID');
+          return false; // ✅ Fail secure: deny access if misconfigured
         }
 
         const nhanVienList = await getAllRows(SHEETS.NHAN_VIEN, mappingNhanVien);
@@ -60,7 +62,8 @@ export const authOptions: NextAuthOptions = {
         return true;
       } catch (error) {
         console.error('❌ Error checking staff authorization:', error);
-        return true;
+        // ✅ Fail secure: deny access on error instead of allowing
+        return false;
       }
     },
     
