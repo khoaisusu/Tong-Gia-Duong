@@ -16,7 +16,9 @@ export const mappingKhachHang = {
   "Ghi chú": "ghiChu",
   "Ngày tạo": "ngayTao",
   "Trạng thái ": "trangThai",
-  "Người giới thiệu": "nguoiGioiThieu"
+  "Người giới thiệu": "nguoiGioiThieu",
+  "Ảnh trước điều trị": "anhTruocDieuTri",
+  "Ảnh sau điều trị": "anhSauDieuTri"
 } as const;
 
 export const mappingSanPham = {
@@ -224,20 +226,22 @@ export function mapObjectToRow<T extends Record<string, string>>(
 export type KhachHang = {
   maKhachHang: string;
   hoVaTen: string;
-  tenThuongGoi: string;
+  tenThuongGoi?: string;
   soDienThoai: string;
-  email: string;
-  ngaySinh: string;
-  gioiTinh: string;
-  diaChi: string;
-  tienSuBenh: string;
-  chanDoan: string;
-  dieuTri: string;
-  ketQua: string;
-  ghiChu: string;
+  email?: string;
+  ngaySinh?: string;
+  gioiTinh?: string;
+  diaChi?: string;
+  tienSuBenh?: string;
+  chanDoan?: string;
+  dieuTri?: string;
+  ketQua?: string;
+  ghiChu?: string;
   ngayTao: string;
-  trangThai: string;
-  nguoiGioiThieu: string;
+  trangThai?: string;
+  nguoiGioiThieu?: string;
+  anhTruocDieuTri?: string;
+  anhSauDieuTri?: string;
 };
 
 export type SanPham = {
