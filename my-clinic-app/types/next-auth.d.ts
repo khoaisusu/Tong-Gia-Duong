@@ -11,6 +11,7 @@ declare module "next-auth" {
       position?: string
       specialization?: string
     }
+    accessToken?: string
   }
 
   interface User {
@@ -21,5 +22,12 @@ declare module "next-auth" {
     role?: string
     position?: string
     specialization?: string
+  }
+}
+
+declare module "next-auth/jwt" {
+  interface JWT {
+    accessToken?: string
+    refreshToken?: string
   }
 }

@@ -25,6 +25,14 @@ export const authOptions: NextAuthOptions = {
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      authorization: {
+        params: {
+          scope: 'openid email profile',
+          prompt: 'consent',
+          access_type: 'offline',
+          response_type: 'code'
+        }
+      }
     }),
   ],
   callbacks: {
@@ -68,6 +76,9 @@ export const authOptions: NextAuthOptions = {
     },
     
     async session({ session, token }) {
+      // Add access token to session
+      session.accessToken = token.accessToken as string;
+
       // Thêm thông tin nhân viên vào session
       if (session.user?.email) {
         // Admin mặc định
@@ -109,6 +120,8 @@ export const authOptions: NextAuthOptions = {
       if (account && user) {
         token.id = user.id;
         token.email = user.email;
+        token.accessToken = account.access_token;
+        token.refreshToken = account.refresh_token;
       }
       return token;
     },

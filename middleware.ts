@@ -10,7 +10,7 @@ export default withAuth(
 
     // Admin-only paths
     const adminPaths = ['/nhan-vien', '/bao-cao', '/cai-dat'];
-    
+
     if (adminPaths.some(p => path.startsWith(p))) {
       if (token?.role !== 'Admin') {
         return NextResponse.redirect(new URL('/', req.url));
