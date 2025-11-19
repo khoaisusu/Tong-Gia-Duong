@@ -55,6 +55,12 @@ export default async function handler(
         // Create new order with validation and transaction safety
         const newOrder = req.body as Partial<DonHang>;
 
+        console.log('📝 Order received from frontend:', {
+          trangThaiThanhToan: newOrder.trangThaiThanhToan,
+          thanhTien: newOrder.thanhTien,
+          ghiChu: newOrder.ghiChu
+        });
+
         // ✅ Step 1: Validate and sanitize input
         const orderValidation = validateRequest(newOrder, OrderSchema);
         if (!orderValidation.valid) {
@@ -67,6 +73,12 @@ export default async function handler(
 
         const sanitizedOrder = orderValidation.data!;
 
+        console.log('✅ After validation and sanitization:', {
+          trangThaiThanhToan: sanitizedOrder.trangThaiThanhToan,
+          thanhTien: sanitizedOrder.thanhTien,
+          ghiChu: sanitizedOrder.ghiChu
+        });
+
         // ✅ Step 2: Generate order ID if not provided
         const orderData = {
           ...sanitizedOrder,
@@ -76,24 +88,50 @@ export default async function handler(
           trangThaiThanhToan: sanitizedOrder.trangThaiThanhToan || 'Chưa thanh toán',
         };
 
+        console.log('💾 Final order data to be saved:', {
+          maDonHang: orderData.maDonHang,
+          trangThaiThanhToan: orderData.trangThaiThanhToan,
+          thanhTien: orderData.thanhTien,
+          ghiChu: orderData.ghiChu
+        });
+
         // ✅ Step 3: Use transaction for atomic order creation
         try {
           await withTransaction(async (tx) => {
             // Create order
             await tx.create(SHEETS.DON_HANG, mappingDonHang, orderData);
 
-            // Create transaction record if payment is completed
-            if (orderData.trangThaiThanhToan === 'Đã thanh toán') {
+            // Create transaction record if payment is completed or partial
+            if (orderData.trangThaiThanhToan === 'Đã thanh toán' ||
+                orderData.trangThaiThanhToan === 'Thanh toán một phần') {
+
+              // For partial payment, extract amount from notes
+              let transactionAmount = orderData.thanhTien;
+
+              if (orderData.trangThaiThanhToan === 'Thanh toán một phần' && orderData.ghiChu) {
+                // Try to extract prepaid amount (thanhTien - remaining)
+                const remainingMatch = orderData.ghiChu.match(/Còn phải trả:\s*([\d.,]+)/);
+                if (remainingMatch) {
+                  const remainingAmount = parseFloat(remainingMatch[1].replace(/\./g, '').replace(/,/g, ''));
+                  const totalAmount = parseFloat(orderData.thanhTien || '0');
+                  if (!isNaN(remainingAmount) && !isNaN(totalAmount)) {
+                    transactionAmount = (totalAmount - remainingAmount).toString();
+                  }
+                }
+              }
+
               const transaction: Partial<GiaoDich> = {
                 maGiaoDich: generateId('GD'),
                 loaiGiaoDich: 'Thu',
                 maThamChieu: orderData.maDonHang,
                 maKhachHang: orderData.maKhachHang,
                 tenKhachHang: orderData.tenKhachHang,
-                soTien: orderData.thanhTien,
+                soTien: transactionAmount,
                 phuongThuc: orderData.phuongThucThanhToan,
                 ngayGiaoDich: orderData.ngayTao,
-                noiDung: `Thanh toán đơn hàng ${orderData.maDonHang}`,
+                noiDung: orderData.trangThaiThanhToan === 'Thanh toán một phần'
+                  ? `Thanh toán trước đơn hàng ${orderData.maDonHang}`
+                  : `Thanh toán đơn hàng ${orderData.maDonHang}`,
                 trangThai: 'Hoàn thành',
                 nhanVienXuLy: orderData.nhanVienTao,
               };
@@ -170,16 +208,33 @@ export default async function handler(
         // Create transaction and update inventory if payment status changed to paid
         if (currentOrder.trangThaiThanhToan !== 'Đã thanh toán' &&
             updates.trangThaiThanhToan === 'Đã thanh toán') {
+
+          // Calculate transaction amount
+          let transactionAmount = updates.thanhTien || currentOrder.thanhTien;
+
+          // If transitioning from partial payment, only charge the remaining amount
+          if (currentOrder.trangThaiThanhToan === 'Thanh toán một phần' && currentOrder.ghiChu) {
+            const remainingMatch = currentOrder.ghiChu.match(/Còn phải trả:\s*([\d.,]+)/);
+            if (remainingMatch) {
+              const remainingAmount = parseFloat(remainingMatch[1].replace(/\./g, '').replace(/,/g, ''));
+              if (!isNaN(remainingAmount)) {
+                transactionAmount = remainingAmount.toString();
+              }
+            }
+          }
+
           const transaction: Partial<GiaoDich> = {
             maGiaoDich: generateId('GD'),
             loaiGiaoDich: 'Thu',
             maThamChieu: maDonHang,
             maKhachHang: currentOrder.maKhachHang,
             tenKhachHang: currentOrder.tenKhachHang,
-            soTien: updates.thanhTien || currentOrder.thanhTien,
+            soTien: transactionAmount,
             phuongThuc: updates.phuongThucThanhToan || currentOrder.phuongThucThanhToan,
             ngayGiaoDich: new Date().toISOString().split('T')[0],
-            noiDung: `Thanh toán đơn hàng ${maDonHang}`,
+            noiDung: currentOrder.trangThaiThanhToan === 'Thanh toán một phần'
+              ? `Thanh toán phần còn lại đơn hàng ${maDonHang}`
+              : `Thanh toán đơn hàng ${maDonHang}`,
             trangThai: 'Hoàn thành',
             nhanVienXuLy: session.user?.name || session.user?.email || '',
           };

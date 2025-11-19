@@ -594,20 +594,42 @@ function OrderDetailsModal({ order, onClose, onUpdateStatus, updatingOrderId }: 
           </div>
           
           {/* VietQR Payment Section */}
-          {(order.trangThaiThanhToan === 'Chưa thanh toán' || order.trangThaiThanhToan === 'Thanh toán một phần') && (
-            <div className="mb-6 flex justify-center">
-              <img
-                src={`https://img.vietqr.io/image/techcombank-19035401605011-compact2.jpg?amount=${parseFloat(order.thanhTien || '0')}&addInfo=DH%20${order.maDonHang}&accountName=Phong%20Kham`}
-                alt="VietQR Code"
-                className="w-64 h-auto"
-              />
-            </div>
-          )}
+          {(order.trangThaiThanhToan === 'Chưa thanh toán' || order.trangThaiThanhToan === 'Thanh toán một phần') && (() => {
+            // For partial payment, extract remaining amount from notes
+            let qrAmount = parseFloat(order.thanhTien || '0');
+
+            if (order.trangThaiThanhToan === 'Thanh toán một phần' && order.ghiChu) {
+              const remainingMatch = order.ghiChu.match(/Còn phải trả:\s*([\d.,]+)/);
+              if (remainingMatch) {
+                // Remove thousand separators and parse
+                const remainingAmount = parseFloat(remainingMatch[1].replace(/\./g, '').replace(/,/g, ''));
+                if (!isNaN(remainingAmount) && remainingAmount > 0) {
+                  qrAmount = remainingAmount;
+                }
+              }
+            }
+
+            return (
+              <div className="mb-6 flex justify-center">
+                <img
+                  src={`https://img.vietqr.io/image/techcombank-19035401605011-compact2.jpg?amount=${qrAmount}&addInfo=DH%20${order.maDonHang}&accountName=Phong%20Kham`}
+                  alt="VietQR Code"
+                  className="w-64 h-auto"
+                />
+              </div>
+            );
+          })()}
 
           {order.ghiChu && (
             <div className="mb-6">
-              <p className="text-sm text-gray-600">Ghi chú</p>
-              <p className="mt-1">{order.ghiChu}</p>
+              <p className="text-sm text-gray-600 font-medium">Ghi chú</p>
+              <div className="mt-1 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                {order.ghiChu.split('\n').map((line: string, index: number) => (
+                  <p key={index} className={line.startsWith('Còn phải trả:') ? 'font-semibold text-orange-600' : ''}>
+                    {line}
+                  </p>
+                ))}
+              </div>
             </div>
           )}
 

@@ -359,6 +359,13 @@ export default function CreateTreatmentPage() {
       ...productsData // Only accompanying products, not services
     ];
 
+    // Build notes with remaining amount if partial payment
+    let orderNotes = notes;
+    if (paymentStatus === 'Thanh toán một phần') {
+      const remainingInfo = `Còn phải trả: ${formatCurrency(remaining)}`;
+      orderNotes = orderNotes ? `${remainingInfo}\n${notes}` : remainingInfo;
+    }
+
     // Create Order object
     const order: Partial<DonHang> = {
       maKhachHang: selectedCustomer.maKhachHang,
@@ -370,7 +377,7 @@ export default function CreateTreatmentPage() {
       thanhTien: total.toString(),
       phuongThucThanhToan: 'Tiền mặt',
       trangThaiThanhToan: paymentStatus,
-      ghiChu: notes,
+      ghiChu: orderNotes,
       nhanVienTao: session?.user?.name || session?.user?.email || '',
     };
 
@@ -778,6 +785,22 @@ export default function CreateTreatmentPage() {
                     </div>
                   </>
                 )}
+
+                {/* Payment Status Display */}
+                <div className="pt-3 border-t">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Trạng thái:</span>
+                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                      prepaidAmount >= total
+                        ? 'bg-green-100 text-green-800'
+                        : prepaidAmount > 0
+                        ? 'bg-yellow-100 text-yellow-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {prepaidAmount >= total ? 'Đã thanh toán' : prepaidAmount > 0 ? 'Thanh toán một phần' : 'Chưa thanh toán'}
+                    </span>
+                  </div>
+                </div>
               </div>
               
               {/* Notes */}

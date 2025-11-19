@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Layout from '../../components/Layout';
-import { MagnifyingGlassIcon, PlusIcon, PencilIcon, TrashIcon, XMarkIcon, UserIcon, PhoneIcon, EnvelopeIcon, MapPinIcon, CalendarIcon } from '@heroicons/react/24/outline';
+import { MagnifyingGlassIcon, PlusIcon, PencilIcon, TrashIcon, XMarkIcon, UserIcon, PhoneIcon, EnvelopeIcon, MapPinIcon, CalendarIcon, PhotoIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import CustomerForm from '../../components/forms/CustomerForm';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
@@ -305,7 +305,31 @@ export default function KhachHangPage() {
 
 // Customer Detail Modal Component
 function CustomerDetailModal({ customer, onClose, onEdit }: { customer: KhachHang; onClose: () => void; onEdit: () => void }) {
-  const [activeTab, setActiveTab] = React.useState<'info' | 'treatments' | 'orders' | 'medical'>('info');
+  const [activeTab, setActiveTab] = React.useState<'info' | 'treatments' | 'orders' | 'medical' | 'photos'>('info');
+  const queryClient = useQueryClient();
+  const [beforePhotos, setBeforePhotos] = useState<string[]>([]);
+  const [afterPhotos, setAfterPhotos] = useState<string[]>([]);
+  const [isSavingPhotos, setIsSavingPhotos] = useState(false);
+
+  // Initialize photos from customer data
+  React.useEffect(() => {
+    if (customer.anhTruocDieuTri) {
+      try {
+        const parsed = JSON.parse(customer.anhTruocDieuTri);
+        setBeforePhotos(Array.isArray(parsed) ? parsed : [customer.anhTruocDieuTri]);
+      } catch {
+        setBeforePhotos(customer.anhTruocDieuTri ? [customer.anhTruocDieuTri] : []);
+      }
+    }
+    if (customer.anhSauDieuTri) {
+      try {
+        const parsed = JSON.parse(customer.anhSauDieuTri);
+        setAfterPhotos(Array.isArray(parsed) ? parsed : [customer.anhSauDieuTri]);
+      } catch {
+        setAfterPhotos(customer.anhSauDieuTri ? [customer.anhSauDieuTri] : []);
+      }
+    }
+  }, [customer]);
 
   // Fetch customer's orders
   const { data: orders = [] } = useQuery({
@@ -425,6 +449,16 @@ function CustomerDetailModal({ customer, onClose, onEdit }: { customer: KhachHan
                 }`}
               >
                 Thông tin điều trị
+              </button>
+              <button
+                onClick={() => setActiveTab('photos')}
+                className={`px-4 py-2 border-b-2 font-medium whitespace-nowrap transition-colors ${
+                  activeTab === 'photos'
+                    ? 'border-primary-600 text-primary-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Hình ảnh
               </button>
             </nav>
           </div>
@@ -619,6 +653,41 @@ function CustomerDetailModal({ customer, onClose, onEdit }: { customer: KhachHan
                 )}
               </>
             )}
+
+            {/* Tab 5: Photos */}
+            {activeTab === 'photos' && (
+              <PhotoUploadTab
+                customer={customer}
+                beforePhotos={beforePhotos}
+                afterPhotos={afterPhotos}
+                onBeforePhotosChange={setBeforePhotos}
+                onAfterPhotosChange={setAfterPhotos}
+                isSaving={isSavingPhotos}
+                onSave={async () => {
+                  setIsSavingPhotos(true);
+                  try {
+                    const res = await fetch(`/api/khach-hang/${customer.maKhachHang}`, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        anhTruocDieuTri: JSON.stringify(beforePhotos),
+                        anhSauDieuTri: JSON.stringify(afterPhotos),
+                      }),
+                    });
+
+                    if (!res.ok) throw new Error('Failed to save photos');
+
+                    toast.success('Lưu ảnh thành công!');
+                    queryClient.invalidateQueries({ queryKey: ['customers'] });
+                  } catch (error) {
+                    console.error('Error saving photos:', error);
+                    toast.error('Có lỗi xảy ra khi lưu ảnh!');
+                  } finally {
+                    setIsSavingPhotos(false);
+                  }
+                }}
+              />
+            )}
           </div>
 
           {/* Actions */}
@@ -638,6 +707,312 @@ function CustomerDetailModal({ customer, onClose, onEdit }: { customer: KhachHan
             </button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Photo Upload Tab Component
+function PhotoUploadTab({
+  customer,
+  beforePhotos,
+  afterPhotos,
+  onBeforePhotosChange,
+  onAfterPhotosChange,
+  isSaving,
+  onSave,
+}: {
+  customer: KhachHang;
+  beforePhotos: string[];
+  afterPhotos: string[];
+  onBeforePhotosChange: (photos: string[]) => void;
+  onAfterPhotosChange: (photos: string[]) => void;
+  isSaving: boolean;
+  onSave: () => void;
+}) {
+  const [uploadingBefore, setUploadingBefore] = useState(false);
+  const [uploadingAfter, setUploadingAfter] = useState(false);
+  const [showInstructions, setShowInstructions] = useState(false);
+  const beforeFileInputRef = useRef<HTMLInputElement>(null);
+  const afterFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Generate suggested filename
+  const generateFilename = (type: 'TDC' | 'SDT') => {
+    const cleanName = customer.hoVaTen
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd')
+      .replace(/Đ/g, 'D')
+      .toUpperCase()
+      .replace(/\s+/g, '_');
+
+    const cleanPhone = customer.soDienThoai.replace(/\s+/g, '');
+    return `${cleanName}_${cleanPhone}_${type}.jpg`;
+  };
+
+  // Upload photo to Google Drive
+  const uploadPhoto = async (file: File, type: 'TDC' | 'SDT') => {
+    const fileName = generateFilename(type);
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('fileName', fileName);
+
+    const response = await fetch('/api/upload-photo', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.details || 'Upload failed');
+    }
+
+    const result = await response.json();
+    return result.url;
+  };
+
+  const handleBeforePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Vui lòng chọn file ảnh');
+      return;
+    }
+
+    // Validate file size (10MB max)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('File ảnh quá lớn (tối đa 10MB)');
+      return;
+    }
+
+    setUploadingBefore(true);
+    try {
+      const url = await uploadPhoto(file, 'TDC');
+      onBeforePhotosChange([...beforePhotos, url]);
+      toast.success('Đã upload ảnh trước điều trị');
+
+      // Reset input
+      if (beforeFileInputRef.current) {
+        beforeFileInputRef.current.value = '';
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast.error('Có lỗi khi upload ảnh');
+    } finally {
+      setUploadingBefore(false);
+    }
+  };
+
+  const handleAfterPhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Vui lòng chọn file ảnh');
+      return;
+    }
+
+    // Validate file size (10MB max)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('File ảnh quá lớn (tối đa 10MB)');
+      return;
+    }
+
+    setUploadingAfter(true);
+    try {
+      const url = await uploadPhoto(file, 'SDT');
+      onAfterPhotosChange([...afterPhotos, url]);
+      toast.success('Đã upload ảnh sau điều trị');
+
+      // Reset input
+      if (afterFileInputRef.current) {
+        afterFileInputRef.current.value = '';
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast.error('Có lỗi khi upload ảnh');
+    } finally {
+      setUploadingAfter(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Instructions */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <button
+          type="button"
+          onClick={() => setShowInstructions(!showInstructions)}
+          className="flex items-center justify-between w-full text-left"
+        >
+          <span className="font-medium text-blue-900">
+            📋 Hướng dẫn upload ảnh
+          </span>
+          <span className="text-blue-600">{showInstructions ? '▼' : '▶'}</span>
+        </button>
+
+        {showInstructions && (
+          <div className="mt-3 text-sm text-blue-800 space-y-2">
+            <p className="font-medium">Tên file tự động:</p>
+            <div className="bg-white p-2 rounded border border-blue-300 font-mono text-xs">
+              <p>Trước điều trị: <span className="text-green-600">{generateFilename('TDC')}</span></p>
+              <p>Sau điều trị: <span className="text-green-600">{generateFilename('SDT')}</span></p>
+            </div>
+
+            <ol className="list-decimal list-inside space-y-1 mt-3">
+              <li>Click nút &quot;Thêm ảnh&quot; bên dưới</li>
+              <li>Chọn file ảnh từ máy tính/điện thoại</li>
+              <li>Ảnh sẽ tự động upload lên Google Drive với tên đã định sẵn</li>
+              <li>Chờ upload hoàn tất và click &quot;Lưu ảnh&quot;</li>
+            </ol>
+          </div>
+        )}
+      </div>
+
+      {/* Before Photos */}
+      <div className="border border-gray-300 rounded-lg p-4">
+        <h4 className="font-medium text-gray-900 mb-3 flex items-center">
+          <PhotoIcon className="w-5 h-5 mr-2 text-blue-600" />
+          Ảnh trước điều trị
+        </h4>
+
+        <div className="mb-3">
+          <input
+            ref={beforeFileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleBeforePhotoSelect}
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={() => beforeFileInputRef.current?.click()}
+            disabled={uploadingBefore}
+            className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed flex items-center justify-center text-sm"
+          >
+            {uploadingBefore ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                Đang upload...
+              </>
+            ) : (
+              <>
+                <ArrowUpTrayIcon className="w-4 h-4 mr-2" />
+                Thêm ảnh
+              </>
+            )}
+          </button>
+        </div>
+
+        {beforePhotos.length > 0 ? (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {beforePhotos.map((url, index) => (
+              <div key={index} className="relative group">
+                <img
+                  src={url}
+                  alt={`Trước điều trị ${index + 1}`}
+                  className="w-full h-32 object-cover rounded-lg border border-gray-300"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="200"%3E%3Crect fill="%23ddd" width="200" height="200"/%3E%3Ctext fill="%23999" x="50%25" y="50%25" text-anchor="middle" dominant-baseline="middle"%3EError%3C/text%3E%3C/svg%3E';
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => onBeforePhotosChange(beforePhotos.filter((_, i) => i !== index))}
+                  className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <XMarkIcon className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8 text-gray-400 border-2 border-dashed border-gray-300 rounded-lg">
+            <PhotoIcon className="w-12 h-12 mx-auto mb-2 opacity-50" />
+            <p className="text-sm">Chưa có ảnh trước điều trị</p>
+          </div>
+        )}
+      </div>
+
+      {/* After Photos */}
+      <div className="border border-gray-300 rounded-lg p-4">
+        <h4 className="font-medium text-gray-900 mb-3 flex items-center">
+          <PhotoIcon className="w-5 h-5 mr-2 text-green-600" />
+          Ảnh sau điều trị
+        </h4>
+
+        <div className="mb-3">
+          <input
+            ref={afterFileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleAfterPhotoSelect}
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={() => afterFileInputRef.current?.click()}
+            disabled={uploadingAfter}
+            className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-green-400 disabled:cursor-not-allowed flex items-center justify-center text-sm"
+          >
+            {uploadingAfter ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                Đang upload...
+              </>
+            ) : (
+              <>
+                <ArrowUpTrayIcon className="w-4 h-4 mr-2" />
+                Thêm ảnh
+              </>
+            )}
+          </button>
+        </div>
+
+        {afterPhotos.length > 0 ? (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {afterPhotos.map((url, index) => (
+              <div key={index} className="relative group">
+                <img
+                  src={url}
+                  alt={`Sau điều trị ${index + 1}`}
+                  className="w-full h-32 object-cover rounded-lg border border-gray-300"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="200"%3E%3Crect fill="%23ddd" width="200" height="200"/%3E%3Ctext fill="%23999" x="50%25" y="50%25" text-anchor="middle" dominant-baseline="middle"%3EError%3C/text%3E%3C/svg%3E';
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => onAfterPhotosChange(afterPhotos.filter((_, i) => i !== index))}
+                  className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <XMarkIcon className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8 text-gray-400 border-2 border-dashed border-gray-300 rounded-lg">
+            <PhotoIcon className="w-12 h-12 mx-auto mb-2 opacity-50" />
+            <p className="text-sm">Chưa có ảnh sau điều trị</p>
+          </div>
+        )}
+      </div>
+
+      {/* Save Button */}
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={isSaving}
+          className="px-6 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isSaving ? 'Đang lưu...' : 'Lưu ảnh'}
+        </button>
       </div>
     </div>
   );
