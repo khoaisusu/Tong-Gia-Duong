@@ -103,7 +103,7 @@ export async function appendRow<T extends Record<string, string>>(
   data: Record<string, any>
 ): Promise<void> {
   const sheets = await getSheetsClient();
-  
+
   try {
     console.log(`📝 Getting headers for sheet "${sheetName}"`);
 
@@ -146,7 +146,7 @@ export async function appendRow<T extends Record<string, string>>(
     const appendResult = await sheets.spreadsheets.values.append({
       spreadsheetId: SPREADSHEET_ID,
       range: `${sheetName}!A:Z`,
-      valueInputOption: 'USER_ENTERED',
+      valueInputOption: 'RAW',
       insertDataOption: 'INSERT_ROWS',
       requestBody: {
         values: [row],
@@ -169,51 +169,51 @@ export async function updateRow<T extends Record<string, string>>(
   updates: Partial<Record<string, any>>
 ): Promise<boolean> {
   const sheets = await getSheetsClient();
-  
+
   try {
     // Get all data
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
       range: `${sheetName}!A:Z`,
     });
-    
+
     const values = response.data.values || [];
     if (values.length === 0) return false;
-    
+
     const [headers, ...rows] = values;
-    
+
     // Find the row index to update
     let rowIndex = -1;
     const idFieldIndex = headers.indexOf(Object.keys(mapping).find(k => mapping[k as keyof T] === idField) || '');
-    
+
     for (let i = 0; i < rows.length; i++) {
       if (rows[i][idFieldIndex] === idValue) {
         rowIndex = i;
         break;
       }
     }
-    
+
     if (rowIndex === -1) return false;
-    
+
     // Get current row data
     const currentData = mapRowToObject(headers, rows[rowIndex], mapping);
-    
+
     // Merge with updates
     const updatedData = { ...currentData, ...updates };
-    
+
     // Convert back to row format
     const updatedRow = mapObjectToRow(updatedData, mapping);
-    
+
     // Update the row in sheets
     await sheets.spreadsheets.values.update({
       spreadsheetId: SPREADSHEET_ID,
       range: `${sheetName}!A${rowIndex + 2}:Z${rowIndex + 2}`,
-      valueInputOption: 'USER_ENTERED',
+      valueInputOption: 'RAW',
       requestBody: {
         values: [updatedRow],
       },
     });
-    
+
     return true;
   } catch (error) {
     console.error(`Error updating row in ${sheetName}:`, error);
@@ -228,43 +228,43 @@ export async function deleteRow<T extends Record<string, string>>(
   idValue: string
 ): Promise<boolean> {
   const sheets = await getSheetsClient();
-  
+
   try {
     // Get sheet metadata to find sheet ID
     const spreadsheet = await sheets.spreadsheets.get({
       spreadsheetId: SPREADSHEET_ID,
     });
-    
+
     const sheet = spreadsheet.data.sheets?.find(s => s.properties?.title === sheetName);
     if (!sheet) throw new Error(`Sheet ${sheetName} not found`);
-    
+
     const sheetId = sheet.properties?.sheetId;
     if (sheetId === undefined) throw new Error(`Sheet ID not found for ${sheetName}`);
-    
+
     // Get all data to find row index
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
       range: `${sheetName}!A:Z`,
     });
-    
+
     const values = response.data.values || [];
     if (values.length === 0) return false;
-    
+
     const [headers, ...rows] = values;
-    
+
     // Find the row index to delete
     let rowIndex = -1;
     const idFieldIndex = headers.indexOf(Object.keys(mapping).find(k => mapping[k as keyof T] === idField) || '');
-    
+
     for (let i = 0; i < rows.length; i++) {
       if (rows[i][idFieldIndex] === idValue) {
         rowIndex = i + 1; // +1 because of header row
         break;
       }
     }
-    
+
     if (rowIndex === -1) return false;
-    
+
     // Delete the row
     await sheets.spreadsheets.batchUpdate({
       spreadsheetId: SPREADSHEET_ID,
@@ -281,7 +281,7 @@ export async function deleteRow<T extends Record<string, string>>(
         }],
       },
     });
-    
+
     return true;
   } catch (error) {
     console.error(`Error deleting row from ${sheetName}:`, error);
