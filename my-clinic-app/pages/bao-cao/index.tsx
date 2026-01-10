@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import Link from 'next/link';
 import Layout from '../../components/Layout';
 import {
   ChartBarIcon,
@@ -7,12 +8,12 @@ import {
   UserGroupIcon,
   ArrowTrendingUpIcon,
   ArrowTrendingDownIcon,
-
   CalendarIcon,
   ArrowDownTrayIcon,
   PrinterIcon,
   ShoppingBagIcon,
   HeartIcon,
+  ClipboardDocumentListIcon,
 } from '@heroicons/react/24/outline';
 import { formatCurrency } from '../../utils/formatting';
 
@@ -113,14 +114,14 @@ export default function BaoCaoPage() {
   // Revenue by month
   const revenueByMonth = () => {
     const monthlyData: { [key: string]: number } = {};
-    
+
     filteredTransactions
       .filter((t: any) => t.loaiGiaoDich === 'Thu')
       .forEach((t: any) => {
         const month = new Date(t.ngayGiaoDich).toLocaleDateString('vi-VN', { year: 'numeric', month: 'short' });
         monthlyData[month] = (monthlyData[month] || 0) + parseFloat(t.soTien || '0');
       });
-    
+
     return Object.entries(monthlyData)
       .map(([label, value]) => ({ label, value }))
       .sort((a, b) => a.label.localeCompare(b.label));
@@ -129,16 +130,16 @@ export default function BaoCaoPage() {
   // Top services
   const topServices = () => {
     const serviceCount: { [key: string]: number } = {};
-    
+
     filteredTreatments.forEach((t: any) => {
       try {
         const services = JSON.parse(t.danhSachDichVu || '[]');
         services.forEach((s: any) => {
           serviceCount[s.tenDichVu] = (serviceCount[s.tenDichVu] || 0) + s.soLan;
         });
-      } catch (e) {}
+      } catch (e) { }
     });
-    
+
     return Object.entries(serviceCount)
       .map(([label, value]) => ({ label, value: value * 500000 })) // Giả định giá trung bình
       .sort((a, b) => b.value - a.value)
@@ -148,7 +149,7 @@ export default function BaoCaoPage() {
   // Top customers
   const topCustomers = () => {
     const customerSpending: { [key: string]: { name: string, amount: number } } = {};
-    
+
     filteredOrders.forEach((o: any) => {
       const key = o.maKhachHang;
       if (!customerSpending[key]) {
@@ -156,7 +157,7 @@ export default function BaoCaoPage() {
       }
       customerSpending[key].amount += parseFloat(o.thanhTien || '0');
     });
-    
+
     filteredTreatments.forEach((t: any) => {
       const key = t.maKhachHang;
       if (!customerSpending[key]) {
@@ -164,7 +165,7 @@ export default function BaoCaoPage() {
       }
       customerSpending[key].amount += parseFloat(t.daThanhToan || '0');
     });
-    
+
     return Object.values(customerSpending)
       .map(({ name, amount }) => ({ label: name, value: amount }))
       .sort((a, b) => b.value - a.value)
@@ -186,14 +187,14 @@ export default function BaoCaoPage() {
         return month === currentMonth && t.loaiGiaoDich === 'Thu';
       })
       .reduce((sum: number, t: any) => sum + parseFloat(t.soTien || '0'), 0);
-    
+
     const lastMonthRevenue = filteredTransactions
       .filter((t: any) => {
         const month = new Date(t.ngayGiaoDich).getMonth();
         return month === currentMonth - 1 && t.loaiGiaoDich === 'Thu';
       })
       .reduce((sum: number, t: any) => sum + parseFloat(t.soTien || '0'), 0);
-    
+
     if (lastMonthRevenue === 0) return 0;
     return ((currentMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100;
   };
@@ -210,7 +211,7 @@ export default function BaoCaoPage() {
               <h2 className="text-lg font-semibold text-gray-900">Báo cáo kinh doanh</h2>
               <p className="text-sm text-gray-600">Thống kê chi tiết hoạt động phòng khám</p>
             </div>
-            
+
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <CalendarIcon className="w-5 h-5 text-gray-400" />
@@ -228,7 +229,7 @@ export default function BaoCaoPage() {
                   className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
                 />
               </div>
-              
+
               <div className="flex gap-2">
                 <button
                   onClick={exportReport}
@@ -246,6 +247,27 @@ export default function BaoCaoPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Quick Access - Daily Report */}
+        <div className="bg-gradient-to-r from-primary-600 to-primary-700 rounded-lg shadow-sm p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-white/20 rounded-full">
+                <ClipboardDocumentListIcon className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h3 className="text-white font-semibold">Báo cáo hàng ngày</h3>
+                <p className="text-primary-100 text-sm">Xem chi tiết lịch hẹn, nhân viên và dịch vụ theo ngày</p>
+              </div>
+            </div>
+            <Link
+              href="/bao-cao/hang-ngay"
+              className="px-4 py-2 bg-white text-primary-700 rounded-lg font-medium hover:bg-primary-50 transition-colors"
+            >
+              Xem báo cáo →
+            </Link>
           </div>
         </div>
 
@@ -329,11 +351,10 @@ export default function BaoCaoPage() {
               <button
                 key={type.value}
                 onClick={() => setReportType(type.value)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  reportType === type.value
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${reportType === type.value
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
               >
                 {type.label}
               </button>
@@ -345,22 +366,22 @@ export default function BaoCaoPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {reportType === 'revenue' && (
             <>
-              <SimpleBarChart 
-                data={revenueByMonth()} 
-                title="Doanh thu theo tháng" 
+              <SimpleBarChart
+                data={revenueByMonth()}
+                title="Doanh thu theo tháng"
               />
-              <SimpleBarChart 
-                data={topCustomers()} 
-                title="Top 5 khách hàng chi tiêu cao nhất" 
+              <SimpleBarChart
+                data={topCustomers()}
+                title="Top 5 khách hàng chi tiêu cao nhất"
               />
             </>
           )}
 
           {reportType === 'services' && (
             <>
-              <SimpleBarChart 
-                data={topServices()} 
-                title="Top 5 dịch vụ được sử dụng nhiều nhất" 
+              <SimpleBarChart
+                data={topServices()}
+                title="Top 5 dịch vụ được sử dụng nhiều nhất"
               />
               <div className="bg-white rounded-lg shadow-sm p-6">
                 <h3 className="text-lg font-semibold mb-4">Thống kê dịch vụ</h3>
@@ -417,9 +438,9 @@ export default function BaoCaoPage() {
                   </div>
                 </div>
               </div>
-              <SimpleBarChart 
-                data={topCustomers()} 
-                title="Top 5 khách hàng theo doanh thu" 
+              <SimpleBarChart
+                data={topCustomers()}
+                title="Top 5 khách hàng theo doanh thu"
               />
             </>
           )}

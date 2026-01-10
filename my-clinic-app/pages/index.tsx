@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/router';
@@ -20,6 +20,23 @@ import { formatCurrency } from '../utils/formatting';
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+
+  // State for appointment date picker
+  const [selectedAppointmentDate, setSelectedAppointmentDate] = useState<Date>(new Date());
+  const [showAppointmentDatePicker, setShowAppointmentDatePicker] = useState(false);
+  const datePickerRef = useRef<HTMLDivElement>(null);
+
+  // Close date picker when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (datePickerRef.current && !datePickerRef.current.contains(event.target as Node)) {
+        setShowAppointmentDatePicker(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Redirect to login if not authenticated
   React.useEffect(() => {
@@ -238,6 +255,57 @@ export default function DashboardPage() {
     refetchOnWindowFocus: false,
   });
 
+  // Query for appointments on selected date from treatment sessions
+  const { data: selectedDateAppointments = [], isLoading: isLoadingAppointments } = useQuery({
+    queryKey: ['appointments-by-date', selectedAppointmentDate.toDateString()],
+    queryFn: async () => {
+      const res = await fetch('/api/luot-tri-lieu');
+      if (!res.ok) throw new Error('Failed to fetch appointments');
+      const sessions = await res.json();
+
+      // Filter sessions for the selected date
+      const filtered = Array.isArray(sessions) ? sessions
+        .filter((s: any) => {
+          if (!s.ngayThucHien) return false;
+          const sessionDate = new Date(s.ngayThucHien);
+          return sessionDate.toDateString() === selectedAppointmentDate.toDateString();
+        })
+        .map((s: any) => ({
+          ...s,
+          // Map fields for consistent display
+          gioHen: s.gioBatDau || '00:00',
+          tenKhachHang: s.tenKhachHang || 'Khách hàng',
+          dichVu: s.dichVuThucHien || 'Không có thông tin dịch vụ',
+          trangThai: s.trangThai || 'Chờ',
+        }))
+        .sort((a: any, b: any) => {
+          const timeA = a.gioHen || '00:00';
+          const timeB = b.gioHen || '00:00';
+          return timeA.localeCompare(timeB);
+        }) : [];
+
+      return filtered;
+    },
+    enabled: !!session,
+    staleTime: 2 * 60 * 1000, // 2 minutes
+  });
+
+  // Helper function to check if selected date is today
+  const isToday = (date: Date) => {
+    const today = new Date();
+    return date.toDateString() === today.toDateString();
+  };
+
+  // Format the selected date for display
+  const formatSelectedDate = (date: Date) => {
+    if (isToday(date)) return 'hôm nay';
+    return date.toLocaleDateString('vi-VN', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'numeric'
+    });
+  };
+
   if (status === 'loading') {
     return (
       <Layout title="Tổng quan">
@@ -277,7 +345,7 @@ export default function DashboardPage() {
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Có lỗi xảy ra</h3>
             <p className="text-gray-600 mb-4">Không thể tải dữ liệu trang tổng quan</p>
-            <button 
+            <button
               onClick={() => window.location.reload()}
               className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors"
             >
@@ -305,11 +373,11 @@ export default function DashboardPage() {
             Chào mừng trở lại, {session?.user?.name}!
           </h1>
           <p className="text-primary-100">
-            {new Date().toLocaleDateString('vi-VN', { 
-              weekday: 'long', 
-              year: 'numeric', 
-              month: 'long', 
-              day: 'numeric' 
+            {new Date().toLocaleDateString('vi-VN', {
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric'
             })}
           </p>
         </div>
@@ -466,27 +534,154 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Today's Appointments */}
+          {/* Appointments with Date Picker */}
           <div className="bg-white rounded-lg shadow-sm p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">Lịch hẹn hôm nay</h2>
-              <CalendarDaysIcon className="w-5 h-5 text-gray-400" />
+              <h2 className="text-lg font-semibold text-gray-900">
+                Lịch hẹn {formatSelectedDate(selectedAppointmentDate)}
+              </h2>
+              <div className="relative" ref={datePickerRef}>
+                <button
+                  onClick={() => setShowAppointmentDatePicker(!showAppointmentDatePicker)}
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors group"
+                  title="Chọn ngày"
+                >
+                  <CalendarDaysIcon className="w-5 h-5 text-gray-400 group-hover:text-primary-600" />
+                </button>
+
+                {/* Date Picker Dropdown */}
+                {showAppointmentDatePicker && (
+                  <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-lg border p-4 z-50 w-72">
+                    <div className="flex items-center justify-between mb-3">
+                      <button
+                        onClick={() => {
+                          const newDate = new Date(selectedAppointmentDate);
+                          newDate.setMonth(newDate.getMonth() - 1);
+                          setSelectedAppointmentDate(newDate);
+                        }}
+                        className="p-1 hover:bg-gray-100 rounded"
+                      >
+                        <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                      </button>
+                      <span className="text-sm font-medium text-gray-900">
+                        {selectedAppointmentDate.toLocaleDateString('vi-VN', { month: 'long', year: 'numeric' })}
+                      </span>
+                      <button
+                        onClick={() => {
+                          const newDate = new Date(selectedAppointmentDate);
+                          newDate.setMonth(newDate.getMonth() + 1);
+                          setSelectedAppointmentDate(newDate);
+                        }}
+                        className="p-1 hover:bg-gray-100 rounded"
+                      >
+                        <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                    </div>
+
+                    {/* Quick actions */}
+                    <div className="flex gap-2 mb-3">
+                      <button
+                        onClick={() => {
+                          setSelectedAppointmentDate(new Date());
+                          setShowAppointmentDatePicker(false);
+                        }}
+                        className="flex-1 px-2 py-1 text-xs bg-primary-50 text-primary-600 rounded hover:bg-primary-100"
+                      >
+                        Hôm nay
+                      </button>
+                      <button
+                        onClick={() => {
+                          const yesterday = new Date();
+                          yesterday.setDate(yesterday.getDate() - 1);
+                          setSelectedAppointmentDate(yesterday);
+                          setShowAppointmentDatePicker(false);
+                        }}
+                        className="flex-1 px-2 py-1 text-xs bg-gray-50 text-gray-600 rounded hover:bg-gray-100"
+                      >
+                        Hôm qua
+                      </button>
+                      <button
+                        onClick={() => {
+                          const tomorrow = new Date();
+                          tomorrow.setDate(tomorrow.getDate() + 1);
+                          setSelectedAppointmentDate(tomorrow);
+                          setShowAppointmentDatePicker(false);
+                        }}
+                        className="flex-1 px-2 py-1 text-xs bg-gray-50 text-gray-600 rounded hover:bg-gray-100"
+                      >
+                        Ngày mai
+                      </button>
+                    </div>
+
+                    {/* Calendar grid */}
+                    <div className="grid grid-cols-7 gap-1 text-center text-xs">
+                      {['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'].map(day => (
+                        <div key={day} className="py-1 font-medium text-gray-500">{day}</div>
+                      ))}
+                      {(() => {
+                        const year = selectedAppointmentDate.getFullYear();
+                        const month = selectedAppointmentDate.getMonth();
+                        const firstDay = new Date(year, month, 1).getDay();
+                        const daysInMonth = new Date(year, month + 1, 0).getDate();
+                        const today = new Date();
+
+                        const days = [];
+                        for (let i = 0; i < firstDay; i++) {
+                          days.push(<div key={`empty-${i}`} className="py-1"></div>);
+                        }
+                        for (let day = 1; day <= daysInMonth; day++) {
+                          const date = new Date(year, month, day);
+                          const isSelected = date.toDateString() === selectedAppointmentDate.toDateString();
+                          const isTodayDate = date.toDateString() === today.toDateString();
+
+                          days.push(
+                            <button
+                              key={day}
+                              onClick={() => {
+                                setSelectedAppointmentDate(date);
+                                setShowAppointmentDatePicker(false);
+                              }}
+                              className={`py-1 rounded hover:bg-gray-100 ${isSelected ? 'bg-primary-600 text-white hover:bg-primary-700' :
+                                isTodayDate ? 'bg-primary-50 text-primary-600 font-medium' : 'text-gray-700'
+                                }`}
+                            >
+                              {day}
+                            </button>
+                          );
+                        }
+                        return days;
+                      })()}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
+
             <div className="space-y-3">
-              {stats?.todayAppointments && stats.todayAppointments.length > 0 ? (
-                stats.todayAppointments.map((appointment: any, index: number) => {
+              {isLoadingAppointments ? (
+                <div className="text-center py-8 text-gray-500">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600 mx-auto mb-2"></div>
+                  <p className="text-sm">Đang tải...</p>
+                </div>
+              ) : selectedDateAppointments.length > 0 ? (
+                selectedDateAppointments.slice(0, 4).map((appointment: any, index: number) => {
                   const currentTime = new Date().toTimeString().slice(0, 5);
                   const appointmentTime = appointment.gioHen || '00:00';
-                  const isPast = appointmentTime < currentTime;
-                  const isUpcoming = !isPast && (parseInt(appointmentTime.split(':')[0]) - parseInt(currentTime.split(':')[0])) <= 1;
+                  const isPast = appointmentTime < currentTime && isToday(selectedAppointmentDate);
+                  const isUpcoming = !isPast && isToday(selectedAppointmentDate) &&
+                    (parseInt(appointmentTime.split(':')[0]) - parseInt(currentTime.split(':')[0])) <= 1;
 
                   const statusConfig = appointment.trangThai === 'Hoàn thành'
                     ? { label: 'Hoàn thành', bg: 'bg-green-100', text: 'text-green-800' }
                     : appointment.trangThai === 'Đã hủy'
-                    ? { label: 'Đã hủy', bg: 'bg-red-100', text: 'text-red-800' }
-                    : isUpcoming
-                    ? { label: 'Sắp tới', bg: 'bg-yellow-100', text: 'text-yellow-800' }
-                    : { label: 'Chờ', bg: 'bg-gray-100', text: 'text-gray-600' };
+                      ? { label: 'Đã hủy', bg: 'bg-red-100', text: 'text-red-800' }
+                      : isUpcoming
+                        ? { label: 'Sắp tới', bg: 'bg-yellow-100', text: 'text-yellow-800' }
+                        : { label: 'Chờ', bg: 'bg-gray-100', text: 'text-gray-600' };
 
                   return (
                     <div key={index} className="flex items-center justify-between py-2 border-b last:border-b-0">
@@ -506,10 +701,17 @@ export default function DashboardPage() {
                 })
               ) : (
                 <div className="text-center py-8 text-gray-500">
-                  <p className="text-sm">Không có lịch hẹn nào hôm nay</p>
+                  <p className="text-sm">Không có lịch hẹn nào {formatSelectedDate(selectedAppointmentDate)}</p>
                 </div>
               )}
             </div>
+
+            {selectedDateAppointments.length > 4 && (
+              <p className="text-xs text-gray-500 mt-2 text-center">
+                +{selectedDateAppointments.length - 4} lịch hẹn khác
+              </p>
+            )}
+
             <Link
               href="/lich-hen"
               className="mt-4 block text-center text-sm text-primary-600 hover:text-primary-700 font-medium"

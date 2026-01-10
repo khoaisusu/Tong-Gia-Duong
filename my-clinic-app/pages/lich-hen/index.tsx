@@ -284,11 +284,10 @@ export default function LichHenPage() {
                   <button
                     key={mode}
                     onClick={() => setViewMode(mode as any)}
-                    className={`flex-1 px-3 py-1 rounded text-sm font-medium transition-colors ${
-                      viewMode === mode
+                    className={`flex-1 px-3 py-1 rounded text-sm font-medium transition-colors ${viewMode === mode
                         ? 'bg-white text-primary-600 shadow-sm'
                         : 'text-gray-600 hover:text-gray-900'
-                    }`}
+                      }`}
                   >
                     {mode === 'day' ? 'Ngày' : mode === 'week' ? 'Tuần' : 'Tháng'}
                   </button>
@@ -375,11 +374,11 @@ export default function LichHenPage() {
               >
                 <ChevronLeftIcon className="w-5 h-5" />
               </button>
-              
+
               <h3 className="text-lg font-medium">
                 Tuần {weekDates[0].toLocaleDateString('vi-VN')} - {weekDates[6].toLocaleDateString('vi-VN')}
               </h3>
-              
+
               <button
                 onClick={() => navigateWeek('next')}
                 className="p-2 hover:bg-gray-100 rounded-lg"
@@ -399,13 +398,12 @@ export default function LichHenPage() {
                     {weekDates.map((date, index) => {
                       const isToday = date.toDateString() === new Date().toDateString();
                       const dayNames = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
-                      
+
                       return (
                         <th
                           key={index}
-                          className={`px-2 py-3 text-center text-xs font-medium uppercase border-b ${
-                            isToday ? 'bg-primary-50 text-primary-700' : 'text-gray-500'
-                          }`}
+                          className={`px-2 py-3 text-center text-xs font-medium uppercase border-b ${isToday ? 'bg-primary-50 text-primary-700' : 'text-gray-500'
+                            }`}
                         >
                           <div>{dayNames[date.getDay()]}</div>
                           <div className="text-lg font-semibold">{date.getDate()}</div>
@@ -423,13 +421,12 @@ export default function LichHenPage() {
                       {weekDates.map((date, index) => {
                         const appointment = getAppointmentForSlot(date, time);
                         const isToday = date.toDateString() === new Date().toDateString();
-                        
+
                         return (
                           <td
                             key={index}
-                            className={`px-1 py-2 border-b border-r relative h-16 ${
-                              isToday ? 'bg-primary-50/30' : ''
-                            }`}
+                            className={`px-1 py-2 border-b border-r relative h-16 ${isToday ? 'bg-primary-50/30' : ''
+                              }`}
                           >
                             {appointment && (
                               <div
@@ -462,7 +459,7 @@ export default function LichHenPage() {
               <h3 className="text-lg font-medium">
                 Lịch hẹn ngày {selectedDate.toLocaleDateString('vi-VN')}
               </h3>
-              
+
               <div className="space-y-3">
                 {selectedDayAppointments.length > 0 ? (
                   selectedDayAppointments.map((appointment) => (
@@ -478,11 +475,11 @@ export default function LichHenPage() {
                               ({appointment.duration} phút)
                             </span>
                           </div>
-                          
+
                           <h4 className="font-medium text-gray-900 mb-1">
                             {appointment.customerName}
                           </h4>
-                          
+
                           <div className="space-y-1 text-sm text-gray-600">
                             <div className="flex items-center gap-2">
                               <PhoneIcon className="w-4 h-4" />
@@ -497,14 +494,14 @@ export default function LichHenPage() {
                               <span>{appointment.staff}</span>
                             </div>
                           </div>
-                          
+
                           {appointment.notes && (
                             <p className="mt-2 text-sm text-gray-600 italic">
                               Ghi chú: {appointment.notes}
                             </p>
                           )}
                         </div>
-                        
+
                         <div className="flex flex-col gap-2">
                           {appointment.status !== 'completed' && appointment.status !== 'cancelled' && (
                             <button
@@ -656,11 +653,10 @@ function AppointmentFormModal({ onClose, onSave }: any) {
           };
           $.datepicker.setDefaults($.datepicker.regional['vi']);
 
-          // Initialize datepicker
+          // Initialize datepicker (cho phép chọn ngày quá khứ để điền bù lịch)
           ($('#appointmentDatePicker') as any).datepicker({
             dateFormat: 'dd/mm/yy',
-            minDate: 0,
-            onSelect: function(dateText: string) {
+            onSelect: function (dateText: string) {
               setAppointmentDate(dateText);
             }
           });
@@ -720,9 +716,9 @@ function AppointmentFormModal({ onClose, onSave }: any) {
   const filteredTreatmentPlans = treatmentPlans.filter((plan: LieuTrinh) => {
     // Only show treatment plans that have services (not empty, not [], not blank)
     const hasServices = plan.danhSachDichVu &&
-                       plan.danhSachDichVu.trim() !== '' &&
-                       plan.danhSachDichVu !== '[]' &&
-                       plan.danhSachDichVu !== 'null';
+      plan.danhSachDichVu.trim() !== '' &&
+      plan.danhSachDichVu !== '[]' &&
+      plan.danhSachDichVu !== 'null';
 
     if (!hasServices) return false;
 
@@ -740,8 +736,8 @@ function AppointmentFormModal({ onClose, onSave }: any) {
 
     // Also filter by search term
     return plan.tenLieuTrinh?.toLowerCase().includes(treatmentSearch.toLowerCase()) ||
-           plan.maLieuTrinh?.toLowerCase().includes(treatmentSearch.toLowerCase()) ||
-           plan.tenKhachHang?.toLowerCase().includes(treatmentSearch.toLowerCase());
+      plan.maLieuTrinh?.toLowerCase().includes(treatmentSearch.toLowerCase()) ||
+      plan.tenKhachHang?.toLowerCase().includes(treatmentSearch.toLowerCase());
   });
 
   // Filter customers for search
@@ -837,273 +833,267 @@ function AppointmentFormModal({ onClose, onSave }: any) {
       const year = parseInt(dateParts[2]);
 
       const selectedDate = new Date(year, month, day);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      // Cho phép đặt lịch hẹn ngày quá khứ để điền bù lịch đã quên
 
-      if (selectedDate < today) {
-        toast.error('Không thể đặt lịch hẹn trong quá khứ!');
+      // Validate time within working hours
+      if (!appointmentTime) {
+        toast.error('Vui lòng chọn giờ hẹn!');
         return;
       }
 
-    // Validate time within working hours
-    if (!appointmentTime) {
-      toast.error('Vui lòng chọn giờ hẹn!');
-      return;
-    }
+      const [hours, minutes] = appointmentTime.split(':').map(Number);
+      if (hours < 7 || hours > 20 || (hours === 20 && minutes > 0)) {
+        toast.error('Giờ hẹn phải trong khoảng 7:00 - 20:00!');
+        return;
+      }
 
-    const [hours, minutes] = appointmentTime.split(':').map(Number);
-    if (hours < 7 || hours > 20 || (hours === 20 && minutes > 0)) {
-      toast.error('Giờ hẹn phải trong khoảng 7:00 - 20:00!');
-      return;
-    }
+      // Save to treatment sessions API
+      const createAppointment = async () => {
+        try {
+          // Convert date from dd/mm/yyyy to yyyy-mm-dd for API
+          const dateParts = appointmentDate.split('/');
+          const formattedDate = `${dateParts[2]}-${dateParts[1].padStart(2, '0')}-${dateParts[0].padStart(2, '0')}`;
 
-    // Save to treatment sessions API
-    const createAppointment = async () => {
-      try {
-        // Convert date from dd/mm/yyyy to yyyy-mm-dd for API
-        const dateParts = appointmentDate.split('/');
-        const formattedDate = `${dateParts[2]}-${dateParts[1].padStart(2, '0')}-${dateParts[0].padStart(2, '0')}`;
+          // Get services from treatment plan (use first service for duration estimation)
+          let primaryService = 'Điều trị';
+          let primaryServiceCode = '';
+          let servicePrice = 0;
 
-        // Get services from treatment plan (use first service for duration estimation)
-        let primaryService = 'Điều trị';
-        let primaryServiceCode = '';
-        let servicePrice = 0;
-
-        if (selectedTreatmentPlan.danhSachDichVu &&
+          if (selectedTreatmentPlan.danhSachDichVu &&
             selectedTreatmentPlan.danhSachDichVu !== '[]' &&
             selectedTreatmentPlan.danhSachDichVu.trim() !== '') {
-          try {
-            const services = JSON.parse(selectedTreatmentPlan.danhSachDichVu);
-            if (Array.isArray(services) && services.length > 0) {
-              // Get service name and code
-              primaryService = services[0]?.tenDichVu || 'Điều trị';
-              primaryServiceCode = services[0]?.maDichVu || '';
-              servicePrice = parseFloat(services[0]?.giaDichVu || '0');
-            }
-          } catch (error) {
-            console.warn('Error parsing services JSON, fallback to splitting:', error);
-            const treatmentServices = selectedTreatmentPlan.danhSachDichVu.split(',');
-            primaryService = treatmentServices[0]?.trim() || 'Điều trị';
-          }
-        }
-
-        console.log('🔍 Service from treatment plan:', {
-          originalDanhSachDichVu: selectedTreatmentPlan.danhSachDichVu,
-          extractedService: primaryService,
-          serviceCode: primaryServiceCode,
-          servicePrice: servicePrice
-        });
-
-        // Calculate commissions using centralized validation functions
-        let employeeCommission = 0;
-        let supervisorCommission = 0;
-        let employeeCommissionRate = 0;
-        let supervisorCommissionRate = 0;
-
-        // Fetch commission rates for both staff and supervisor
-        if (primaryServiceCode && servicePrice > 0) {
-          try {
-            // Fetch commission configuration for this service
-            const commissionRes = await fetch(`/api/hoa-hong?maDichVu=${primaryServiceCode}`);
-            if (commissionRes.ok) {
-              const commissions = await commissionRes.json();
-
-              // Get employee commission rate
-              if (selectedStaff) {
-                const staffCommission = commissions.find((c: any) =>
-                  c.tenNhanVien === selectedStaff && c.maDichVu === primaryServiceCode
-                );
-
-                if (staffCommission) {
-                  employeeCommissionRate = parseFloat(staffCommission.tyLeHoaHong || '0');
-                  // ✅ Use validated calculation function
-                  employeeCommission = calculateEmployeeCommission(servicePrice, employeeCommissionRate);
-                  console.log('💰 Employee commission:', {
-                    rate: employeeCommissionRate,
-                    amount: employeeCommission
-                  });
-                } else {
-                  console.log('⚠️ No commission configuration found for employee');
-                }
-              }
-
-              // Get supervisor commission rate
-              if (selectedSupervisor) {
-                const supervisorCommissionConfig = commissions.find((c: any) =>
-                  c.tenNhanVien === selectedSupervisor && c.maDichVu === primaryServiceCode
-                );
-
-                if (supervisorCommissionConfig) {
-                  supervisorCommissionRate = parseFloat(supervisorCommissionConfig.tyLeHoaHong || '0');
-                  // ✅ Use validated calculation function (prevents negative commissions)
-                  supervisorCommission = calculateSupervisorCommission(
-                    servicePrice,
-                    employeeCommissionRate,
-                    supervisorCommissionRate
-                  );
-                  console.log('💰 Supervisor commission:', {
-                    supervisorRate: supervisorCommissionRate,
-                    employeeRate: employeeCommissionRate,
-                    amount: supervisorCommission
-                  });
-                } else {
-                  console.log('⚠️ No commission configuration found for supervisor');
-                }
-              }
-            }
-          } catch (error) {
-            console.warn('⚠️ Error fetching commission data:', error);
-            // Continue without commission if there's an error
-          }
-        }
-
-        const duration = 60; // Default 60 minutes
-
-        // Calculate end time
-        const [hours, minutes] = appointmentTime.split(':').map(Number);
-        const endTime = new Date();
-        endTime.setHours(hours, minutes + duration);
-        const endTimeStr = endTime.toTimeString().substring(0, 5);
-
-        const appointmentData = {
-          maLieuTrinh: selectedTreatmentPlan.maLieuTrinh,
-          maKhachHang: selectedTreatmentPlan.maKhachHang,
-          tenKhachHang: selectedTreatmentPlan.tenKhachHang,
-          ngayThucHien: formattedDate,
-          gioBatDau: appointmentTime,
-          gioKetThuc: endTimeStr,
-          dichVuThucHien: primaryService,
-          nhanVienThucHien: selectedStaff || '',
-          nguoiChinh: selectedSupervisor || '',
-          hoaHongNhanVien: employeeCommission > 0 ? employeeCommission.toFixed(0) : '',
-          luongQuanLy: supervisorCommission > 0 ? supervisorCommission.toFixed(0) : '',
-          danhGia: '',
-          ghiChu: notes,
-          trangThai: 'Đã lên lịch',
-        };
-
-        console.log('📋 Appointment data being sent:', appointmentData);
-
-        const res = await fetch('/api/luot-tri-lieu', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(appointmentData),
-        });
-
-        console.log('🌐 API Response status:', res.status, res.statusText);
-
-        if (!res.ok) {
-          const errorData = await res.json();
-          console.error('❌ API Error:', errorData);
-          throw new Error(errorData.error || 'Failed to create appointment');
-        }
-
-        const responseData = await res.json();
-        console.log('✅ API Success response:', responseData);
-
-        // Get the created appointment ID from response
-        const createdAppointmentId = responseData.data?.maLuot;
-
-        // Save additional services if any
-        if (additionalServices.length > 0 && createdAppointmentId) {
-          console.log('💾 Saving additional services for appointment:', createdAppointmentId);
-
-          // Fetch all services and staff data
-          const servicesRes = await fetch('/api/dich-vu');
-          if (!servicesRes.ok) throw new Error('Failed to fetch services');
-          const servicesData = await servicesRes.json();
-
-          const staffRes = await fetch('/api/nhan-vien');
-          if (!staffRes.ok) throw new Error('Failed to fetch staff');
-          const staffData = await staffRes.json();
-
-          // Save each additional service
-          for (const item of additionalServices) {
             try {
-              // Find service details
-              const service = servicesData.find((s: DichVu) => s.tenDichVu === item.service);
-              if (!service) {
-                console.warn(`Service not found: ${item.service}`);
-                continue;
+              const services = JSON.parse(selectedTreatmentPlan.danhSachDichVu);
+              if (Array.isArray(services) && services.length > 0) {
+                // Get service name and code
+                primaryService = services[0]?.tenDichVu || 'Điều trị';
+                primaryServiceCode = services[0]?.maDichVu || '';
+                servicePrice = parseFloat(services[0]?.giaDichVu || '0');
               }
+            } catch (error) {
+              console.warn('Error parsing services JSON, fallback to splitting:', error);
+              const treatmentServices = selectedTreatmentPlan.danhSachDichVu.split(',');
+              primaryService = treatmentServices[0]?.trim() || 'Điều trị';
+            }
+          }
 
-              // Find staff details
-              const staffMember = staffData.find((s: NhanVien) => s.hoVaTen === item.staff);
-              if (!staffMember) {
-                console.warn(`Staff not found: ${item.staff}`);
-                continue;
-              }
+          console.log('🔍 Service from treatment plan:', {
+            originalDanhSachDichVu: selectedTreatmentPlan.danhSachDichVu,
+            extractedService: primaryService,
+            serviceCode: primaryServiceCode,
+            servicePrice: servicePrice
+          });
 
-              const servicePrice = parseFloat(service.giaDichVu || '0');
+          // Calculate commissions using centralized validation functions
+          let employeeCommission = 0;
+          let supervisorCommission = 0;
+          let employeeCommissionRate = 0;
+          let supervisorCommissionRate = 0;
 
-              // Fetch commission rate
-              let commissionRate = 0;
-              let commission = 0;
+          // Fetch commission rates for both staff and supervisor
+          if (primaryServiceCode && servicePrice > 0) {
+            try {
+              // Fetch commission configuration for this service
+              const commissionRes = await fetch(`/api/hoa-hong?maDichVu=${primaryServiceCode}`);
+              if (commissionRes.ok) {
+                const commissions = await commissionRes.json();
 
-              try {
-                const commissionRes = await fetch(`/api/hoa-hong?maDichVu=${service.maDichVu}`);
-                if (commissionRes.ok) {
-                  const commissions = await commissionRes.json();
+                // Get employee commission rate
+                if (selectedStaff) {
                   const staffCommission = commissions.find((c: any) =>
-                    c.tenNhanVien === item.staff && c.maDichVu === service.maDichVu
+                    c.tenNhanVien === selectedStaff && c.maDichVu === primaryServiceCode
                   );
 
                   if (staffCommission) {
-                    commissionRate = parseFloat(staffCommission.tyLeHoaHong || '0');
-                    commission = (servicePrice * commissionRate) / 100;
+                    employeeCommissionRate = parseFloat(staffCommission.tyLeHoaHong || '0');
+                    // ✅ Use validated calculation function
+                    employeeCommission = calculateEmployeeCommission(servicePrice, employeeCommissionRate);
+                    console.log('💰 Employee commission:', {
+                      rate: employeeCommissionRate,
+                      amount: employeeCommission
+                    });
+                  } else {
+                    console.log('⚠️ No commission configuration found for employee');
                   }
                 }
-              } catch (error) {
-                console.warn('Error fetching commission:', error);
-              }
 
-              // Create detail record
-              const detailData = {
-                maLuot: createdAppointmentId,
-                maDichVu: service.maDichVu,
-                tenDichVu: service.tenDichVu,
-                maNhanVien: staffMember.maNhanVien,
-                tenNhanVien: staffMember.hoVaTen,
-                giaDichVu: servicePrice.toString(),
-                tyLeHoaHong: commissionRate.toString(),
-                hoaHong: commission.toFixed(0),
-                ngayThucHien: formattedDate,
-                ghiChu: '',
-              };
+                // Get supervisor commission rate
+                if (selectedSupervisor) {
+                  const supervisorCommissionConfig = commissions.find((c: any) =>
+                    c.tenNhanVien === selectedSupervisor && c.maDichVu === primaryServiceCode
+                  );
 
-              const response = await fetch('/api/chi-tiet-dich-vu-them', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(detailData),
-              });
-
-              if (!response.ok) {
-                console.error(`Failed to save additional service: ${item.service}`);
-              } else {
-                console.log(`✅ Saved additional service: ${item.service}`);
+                  if (supervisorCommissionConfig) {
+                    supervisorCommissionRate = parseFloat(supervisorCommissionConfig.tyLeHoaHong || '0');
+                    // ✅ Use validated calculation function (prevents negative commissions)
+                    supervisorCommission = calculateSupervisorCommission(
+                      servicePrice,
+                      employeeCommissionRate,
+                      supervisorCommissionRate
+                    );
+                    console.log('💰 Supervisor commission:', {
+                      supervisorRate: supervisorCommissionRate,
+                      employeeRate: employeeCommissionRate,
+                      amount: supervisorCommission
+                    });
+                  } else {
+                    console.log('⚠️ No commission configuration found for supervisor');
+                  }
+                }
               }
             } catch (error) {
-              console.error(`Error saving service ${item.service}:`, error);
+              console.warn('⚠️ Error fetching commission data:', error);
+              // Continue without commission if there's an error
             }
           }
+
+          const duration = 60; // Default 60 minutes
+
+          // Calculate end time
+          const [hours, minutes] = appointmentTime.split(':').map(Number);
+          const endTime = new Date();
+          endTime.setHours(hours, minutes + duration);
+          const endTimeStr = endTime.toTimeString().substring(0, 5);
+
+          const appointmentData = {
+            maLieuTrinh: selectedTreatmentPlan.maLieuTrinh,
+            maKhachHang: selectedTreatmentPlan.maKhachHang,
+            tenKhachHang: selectedTreatmentPlan.tenKhachHang,
+            ngayThucHien: formattedDate,
+            gioBatDau: appointmentTime,
+            gioKetThuc: endTimeStr,
+            dichVuThucHien: primaryService,
+            nhanVienThucHien: selectedStaff || '',
+            nguoiChinh: selectedSupervisor || '',
+            hoaHongNhanVien: employeeCommission > 0 ? employeeCommission.toFixed(0) : '',
+            luongQuanLy: supervisorCommission > 0 ? supervisorCommission.toFixed(0) : '',
+            danhGia: '',
+            ghiChu: notes,
+            trangThai: 'Đã lên lịch',
+          };
+
+          console.log('📋 Appointment data being sent:', appointmentData);
+
+          const res = await fetch('/api/luot-tri-lieu', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(appointmentData),
+          });
+
+          console.log('🌐 API Response status:', res.status, res.statusText);
+
+          if (!res.ok) {
+            const errorData = await res.json();
+            console.error('❌ API Error:', errorData);
+            throw new Error(errorData.error || 'Failed to create appointment');
+          }
+
+          const responseData = await res.json();
+          console.log('✅ API Success response:', responseData);
+
+          // Get the created appointment ID from response
+          const createdAppointmentId = responseData.data?.maLuot;
+
+          // Save additional services if any
+          if (additionalServices.length > 0 && createdAppointmentId) {
+            console.log('💾 Saving additional services for appointment:', createdAppointmentId);
+
+            // Fetch all services and staff data
+            const servicesRes = await fetch('/api/dich-vu');
+            if (!servicesRes.ok) throw new Error('Failed to fetch services');
+            const servicesData = await servicesRes.json();
+
+            const staffRes = await fetch('/api/nhan-vien');
+            if (!staffRes.ok) throw new Error('Failed to fetch staff');
+            const staffData = await staffRes.json();
+
+            // Save each additional service
+            for (const item of additionalServices) {
+              try {
+                // Find service details
+                const service = servicesData.find((s: DichVu) => s.tenDichVu === item.service);
+                if (!service) {
+                  console.warn(`Service not found: ${item.service}`);
+                  continue;
+                }
+
+                // Find staff details
+                const staffMember = staffData.find((s: NhanVien) => s.hoVaTen === item.staff);
+                if (!staffMember) {
+                  console.warn(`Staff not found: ${item.staff}`);
+                  continue;
+                }
+
+                const servicePrice = parseFloat(service.giaDichVu || '0');
+
+                // Fetch commission rate
+                let commissionRate = 0;
+                let commission = 0;
+
+                try {
+                  const commissionRes = await fetch(`/api/hoa-hong?maDichVu=${service.maDichVu}`);
+                  if (commissionRes.ok) {
+                    const commissions = await commissionRes.json();
+                    const staffCommission = commissions.find((c: any) =>
+                      c.tenNhanVien === item.staff && c.maDichVu === service.maDichVu
+                    );
+
+                    if (staffCommission) {
+                      commissionRate = parseFloat(staffCommission.tyLeHoaHong || '0');
+                      commission = (servicePrice * commissionRate) / 100;
+                    }
+                  }
+                } catch (error) {
+                  console.warn('Error fetching commission:', error);
+                }
+
+                // Create detail record
+                const detailData = {
+                  maLuot: createdAppointmentId,
+                  maDichVu: service.maDichVu,
+                  tenDichVu: service.tenDichVu,
+                  maNhanVien: staffMember.maNhanVien,
+                  tenNhanVien: staffMember.hoVaTen,
+                  giaDichVu: servicePrice.toString(),
+                  tyLeHoaHong: commissionRate.toString(),
+                  hoaHong: commission.toFixed(0),
+                  ngayThucHien: formattedDate,
+                  ghiChu: '',
+                };
+
+                const response = await fetch('/api/chi-tiet-dich-vu-them', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(detailData),
+                });
+
+                if (!response.ok) {
+                  console.error(`Failed to save additional service: ${item.service}`);
+                } else {
+                  console.log(`✅ Saved additional service: ${item.service}`);
+                }
+              } catch (error) {
+                console.error(`Error saving service ${item.service}:`, error);
+              }
+            }
+          }
+
+          // Invalidate and refetch treatment sessions data
+          queryClient.invalidateQueries({ queryKey: ['treatment-sessions'] });
+
+          toast.success('Đã tạo lịch hẹn thành công!');
+
+          // Navigate to the appointment date to show the new appointment
+          const appointmentDateObj = new Date(formattedDate);
+          // Pass the date to parent component through onSave callback
+          onSave(appointmentDateObj);
+        } catch (error) {
+          console.error('Error creating appointment:', error);
+          toast.error('Có lỗi xảy ra khi tạo lịch hẹn!');
         }
+      };
 
-        // Invalidate and refetch treatment sessions data
-        queryClient.invalidateQueries({ queryKey: ['treatment-sessions'] });
-
-        toast.success('Đã tạo lịch hẹn thành công!');
-
-        // Navigate to the appointment date to show the new appointment
-        const appointmentDateObj = new Date(formattedDate);
-        // Pass the date to parent component through onSave callback
-        onSave(appointmentDateObj);
-      } catch (error) {
-        console.error('Error creating appointment:', error);
-        toast.error('Có lỗi xảy ra khi tạo lịch hẹn!');
-      }
-    };
-
-    await createAppointment();
+      await createAppointment();
     } catch (error) {
       console.error('Error in handleSubmit:', error);
     } finally {
@@ -1135,15 +1125,15 @@ function AppointmentFormModal({ onClose, onSave }: any) {
                         {(() => {
                           try {
                             if (selectedTreatmentPlan.danhSachDichVu &&
-                                selectedTreatmentPlan.danhSachDichVu !== '[]' &&
-                                selectedTreatmentPlan.danhSachDichVu.trim() !== '') {
+                              selectedTreatmentPlan.danhSachDichVu !== '[]' &&
+                              selectedTreatmentPlan.danhSachDichVu.trim() !== '') {
                               const services = JSON.parse(selectedTreatmentPlan.danhSachDichVu);
                               if (Array.isArray(services) && services.length > 0) {
                                 const serviceNames = services.map((s: any) => s.tenDichVu).join(', ');
                                 return <span className="text-gray-900"> - {serviceNames}</span>;
                               }
                             }
-                          } catch (e) {}
+                          } catch (e) { }
                           return null;
                         })()}
                       </p>
@@ -1335,11 +1325,10 @@ function AppointmentFormModal({ onClose, onSave }: any) {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className={`px-4 py-2 text-white rounded-md transition-colors ${
-                  isSubmitting
+                className={`px-4 py-2 text-white rounded-md transition-colors ${isSubmitting
                     ? 'bg-gray-400 cursor-not-allowed'
                     : 'bg-primary-600 hover:bg-primary-700'
-                }`}
+                  }`}
               >
                 {isSubmitting ? 'Đang tạo...' : 'Thêm lịch hẹn'}
               </button>
@@ -1396,11 +1385,10 @@ function AppointmentFormModal({ onClose, onSave }: any) {
                             {customer.soDienThoai} • {customer.maKhachHang}
                           </p>
                         </div>
-                        <span className={`px-2 py-1 text-xs rounded-full ${
-                          customer.trangThai === 'VIP'
+                        <span className={`px-2 py-1 text-xs rounded-full ${customer.trangThai === 'VIP'
                             ? 'bg-purple-100 text-purple-800'
                             : 'bg-green-100 text-green-800'
-                        }`}>
+                          }`}>
                           {customer.trangThai || 'Mới'}
                         </span>
                       </div>
@@ -1458,7 +1446,7 @@ function AppointmentFormModal({ onClose, onSave }: any) {
                           serviceNames = services.map((s: any) => s.tenDichVu).join(', ');
                         }
                       }
-                    } catch (e) {}
+                    } catch (e) { }
 
                     return (
                       <div
@@ -1474,13 +1462,12 @@ function AppointmentFormModal({ onClose, onSave }: any) {
                             {plan.tenLieuTrinh}
                             {serviceNames && <span className="text-gray-900 font-normal"> - {serviceNames}</span>}
                           </p>
-                          <span className={`px-2 py-0.5 text-xs rounded-full ${
-                            plan.trangThai === 'Hoàn thành'
+                          <span className={`px-2 py-0.5 text-xs rounded-full ${plan.trangThai === 'Hoàn thành'
                               ? 'bg-green-100 text-green-600'
                               : plan.trangThai === 'Đang tiến hành'
-                              ? 'bg-blue-100 text-blue-600'
-                              : 'bg-yellow-100 text-yellow-600'
-                          }`}>
+                                ? 'bg-blue-100 text-blue-600'
+                                : 'bg-yellow-100 text-yellow-600'
+                            }`}>
                             {plan.trangThai || 'Mới'}
                           </span>
                         </div>
@@ -1895,16 +1882,15 @@ function AppointmentDetailsModal({ appointment, onClose }: any) {
 
             <div>
               <p className="text-sm text-gray-600">Trạng thái</p>
-              <p className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                appointment.status === 'completed' ? 'bg-green-100 text-green-800' :
-                appointment.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
-                appointment.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                'bg-yellow-100 text-yellow-800'
-              }`}>
+              <p className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${appointment.status === 'completed' ? 'bg-green-100 text-green-800' :
+                  appointment.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
+                    appointment.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                      'bg-yellow-100 text-yellow-800'
+                }`}>
                 {appointment.status === 'completed' ? 'Đã hoàn thành' :
-                 appointment.status === 'confirmed' ? 'Đã xác nhận' :
-                 appointment.status === 'cancelled' ? 'Đã hủy' :
-                 'Đã lên lịch'}
+                  appointment.status === 'confirmed' ? 'Đã xác nhận' :
+                    appointment.status === 'cancelled' ? 'Đã hủy' :
+                      'Đã lên lịch'}
               </p>
             </div>
 
